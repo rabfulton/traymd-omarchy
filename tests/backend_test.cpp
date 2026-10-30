@@ -99,8 +99,10 @@ private slots:
         write(dir.filePath("note.md"), "original");
         NoteStore store;
         QVERIFY(store.initialize(dir.path()));
-        store.markdown()->setAccent(QColor("#ff0000"));
-        store.markdown()->setFontSize(20);
+        MarkdownHighlighter renderer;
+        renderer.setDocument(store.document());
+        renderer.setAccent(QColor("#ff0000"));
+        renderer.setFontSize(20);
         QVERIFY(!store.dirty());
         replaceText(store, "first edit");
         QTest::qWait(650);

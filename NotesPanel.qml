@@ -15,8 +15,7 @@ NotesPopup {
     property var openExternalUrl: function(url) { return Qt.openUrlExternally(url) }
     signal settingsEdited(var values)
     readonly property alias textEditor: editor
-    readonly property var renderer: Backend.Notes.markdown
-    readonly property var markdown: renderer
+    readonly property alias markdown: renderer
     readonly property alias editMenu: editorMenu
     readonly property alias noteToolbar: tools
     readonly property alias decorationItems: decorationRepeater
@@ -28,17 +27,6 @@ NotesPopup {
         Commons.Color.popups.background.g * 0.94 + foreground.g * 0.06,
         Commons.Color.popups.background.b * 0.94 + foreground.b * 0.06, 1)
     readonly property real initialHeight: Math.round((screenH > 0 ? screenH : 1080) * 0.5)
-    readonly property var renderingStyle: ({
-        accent: Commons.Color.accent,
-        headingColors: [Backend.Theme.colors.blue || Backend.Theme.colors.color4 || Commons.Color.accent,
-            Backend.Theme.colors.magenta || Backend.Theme.colors.color5 || Commons.Color.accent,
-            Backend.Theme.colors.yellow || Backend.Theme.colors.color3 || Commons.Color.accent],
-        muted: root.secondary,
-        codeBackground: root.codeFill,
-        fontSize: root.editorFontSize
-    })
-    onRenderingStyleChanged: updateRendering()
-    onRendererChanged: updateRendering()
     contentHeight: cappedContentHeight(Math.max(300, preferredHeight || initialHeight))
     contentWidth: fittedContentWidth(Math.max(280, preferredWidth || contentHeight))
     focusTarget: editor
@@ -47,11 +35,6 @@ NotesPopup {
     onDeletePendingChanged: if (deletePending) { deleteDialog.selectedIndex = 0; focusEditor() }
 
     function focusEditor() { editor.forceActiveFocus() }
-
-    function updateRendering() {
-        if (!renderer) return
-        for (const key in renderingStyle) renderer[key] = renderingStyle[key]
-    }
 
     function navigate(delta) {
         Backend.Notes.navigate(delta)
@@ -252,6 +235,19 @@ NotesPopup {
                         Backend.Notes.attachEditor(editor.textDocument)
                         editor.cursorPosition = editor.length
                     }
+                }
+
+                Backend.MarkdownHighlighter {
+                    id: renderer
+                    textDocument: editor.textDocument
+                    cursorPosition: editor.cursorPosition
+                    accent: Commons.Color.accent
+                    headingColors: [Backend.Theme.colors.blue || Backend.Theme.colors.color4 || Commons.Color.accent,
+                        Backend.Theme.colors.magenta || Backend.Theme.colors.color5 || Commons.Color.accent,
+                        Backend.Theme.colors.yellow || Backend.Theme.colors.color3 || Commons.Color.accent]
+                    muted: root.secondary
+                    codeBackground: root.codeFill
+                    fontSize: root.editorFontSize
                 }
 
                 TapHandler {

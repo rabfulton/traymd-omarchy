@@ -347,7 +347,58 @@ ShellRoot {
                 if (openedLinks.length !== 3 || editor.selectedText === "" || widget.notes.text !== source) {
                     console.error("Dragging a link must select text without opening or editing it"); Qt.exit(1); return
                 }
+                panel.editorFontSize = 24
+                panel.textEditor.text = "test note\n"
+                widget.notes.save()
+                phase = 9
+                return
             }
+            if (phase === 90) return // Wait for the asynchronous image capture.
+            if (phase === 9) {
+                panel.textEditor.deselect()
+                panel.textEditor.cursorVisible = false
+                const first = panel.textEditor.positionToRectangle(0)
+                if (first.height < 24) { console.error("Loaded note ignored the editor font size", first.height); Qt.exit(1); return }
+                phase = 90
+                panel.textEditor.grabToImage(function(result) {
+                    result.saveToFile(Quickshell.env("TRAYMD_TEST_RENDER_PREFIX") + ".before-switch.png")
+                    phase = 10
+                })
+                return
+            }
+            if (phase === 10) {
+                widget.notes.newNote()
+                panel.textEditor.forceActiveFocus()
+                for (const line of ["another test note", "test", "why is the text so small?"]) {
+                    for (const ch of line) keyEvents.keyClickChar(ch, Qt.NoModifier, 0)
+                    keyEvents.keyClick(Qt.Key_Return, Qt.NoModifier, 0)
+                }
+                phase = 11
+                return
+            }
+            if (phase === 11) {
+                const editor = panel.textEditor
+                const first = editor.positionToRectangle(0)
+                const second = editor.positionToRectangle(editor.text.indexOf("\n") + 1)
+                if (second.y < first.y + first.height - 1 || first.height < 24) {
+                    console.error("Plain note lines overlap or use the wrong font size", first, second); Qt.exit(1); return
+                }
+                widget.notes.navigate(-1)
+                phase = 12
+                return
+            }
+            if (phase === 12) {
+                if (panel.textEditor.text !== "test note\n") { console.error("Wrong note after switching back"); Qt.exit(1); return }
+                panel.textEditor.deselect()
+                panel.textEditor.cursorVisible = false
+                phase = 90
+                panel.textEditor.grabToImage(function(result) {
+                    result.saveToFile(Quickshell.env("TRAYMD_TEST_RENDER_PREFIX") + ".after-switch.png")
+                    phase = 13
+                })
+                return
+            }
+            panel.editorFontSize = 16
             running = false
             const docsPreview = Quickshell.env("TRAYMD_DOCS_PREVIEW") === "1"
             if (docsPreview) {

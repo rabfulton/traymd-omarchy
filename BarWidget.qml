@@ -13,7 +13,7 @@ Ui.BarWidget {
     property bool pendingNewNote: false
     property bool setupLaunching: false
     property var launchSetup: function() {
-        Quickshell.execDetached(["omarchy-launch-terminal", "bash", pluginDirectory + "/scripts/first-run.sh"])
+        Quickshell.execDetached(["python3", pluginDirectory + "/scripts/launch-setup.py"])
     }
     readonly property bool ready: editorLoader.status === Loader.Ready
     readonly property bool opened: ready && editorLoader.item.opened

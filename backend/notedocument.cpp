@@ -7,7 +7,6 @@ NoteDocument::NoteDocument(const QString &path, const QByteArray &bytes, const Q
     : QObject(parent), m_path(path), m_diskBytes(bytes) {
     m_document.setPlainText(text);
     m_document.setModified(false);
-    m_renderer.setDocument(&m_document);
     m_savedText = m_observedText = m_document.toPlainText();
     m_autosave.setSingleShot(true);
     m_autosave.setInterval(1500);

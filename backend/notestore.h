@@ -7,12 +7,12 @@
 #include <QStringList>
 #include <QTimer>
 #include "notedocument.h"
+class NoteEditor;
 
 // One instance per QML engine, shared by bar widgets on every monitor.
 class NoteStore : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString text READ text NOTIFY textChanged)
-    Q_PROPERTY(MarkdownHighlighter *markdown READ markdown NOTIFY currentChanged)
     Q_PROPERTY(QString currentName READ currentName NOTIFY currentChanged)
     Q_PROPERTY(int currentIndex READ currentIndex NOTIFY currentChanged)
     Q_PROPERTY(int count READ count NOTIFY currentChanged)
@@ -25,7 +25,6 @@ public:
     ~NoteStore() override;
     QString text() const { return m_current ? m_current->document()->toPlainText() : QString(); }
     QTextDocument *document() const { return m_current ? m_current->document() : nullptr; }
-    MarkdownHighlighter *markdown() const { return m_current ? m_current->renderer() : nullptr; }
     QString currentName() const;
     int currentIndex() const { return m_index; }
     int count() const { return m_names.size(); }
@@ -53,6 +52,7 @@ private:
     QString m_directory, m_error;
     NoteDocument *m_current = nullptr;
     QHash<QString, NoteDocument *> m_documents;
+    QHash<QQuickTextDocument *, NoteEditor *> m_editors;
     QStringList m_names;
     int m_index = -1;
     QFileSystemWatcher m_watcher;

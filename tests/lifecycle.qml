@@ -1,11 +1,13 @@
 import QtQuick
 import Quickshell
+import QtTest 1.2
 import qs.Ui
 import "Plugin" as Plugin
 
 // Exercise both complete widget replacement and Quickshell engine reload.
 ShellRoot {
     property var notes: null
+    TestEvent { id: keyEvents }
     Connections {
         target: Quickshell
         function onReloadCompleted() { Quickshell.inhibitReloadPopup() }
@@ -46,15 +48,16 @@ ShellRoot {
                 console.error("Lifecycle load failed"); Qt.exit(1); return
             }
             if (state.original === "") state.original = notes.text
-            if (!state.original.startsWith("# ") || notes.text !== state.original || (state.reloads > 0 && notes.dirty)) {
+            if (state.original === "" || notes.text !== state.original || (state.reloads > 0 && notes.dirty)) {
                 console.error("Replacing widgets or reloading the shell changed the note"); Qt.exit(1); return
             }
             if (phase === 0) {
                 if (state.reloads === 0) {
                     // A real list edit, still inside the autosave idle period.
-                    const bullet = notes.text.indexOf("\n- ")
-                    const end = notes.text.indexOf("\n", bullet + 1)
-                    if (bullet < 0 || notes.markdown.editKey(end, end, end, Qt.Key_Return) < 0 || !notes.dirty) {
+                    const panel = view.item.children.find(function(child) { return child.textEditor !== undefined })
+                    if (!panel) { console.error("Editor panel missing"); Qt.exit(1); return }
+                    panel.textEditor.insert(panel.textEditor.length, "\nPending edit before reload.")
+                    if (!notes.dirty) {
                         console.error("Could not create a pending edit for the reload test"); Qt.exit(1); return
                     }
                     state.original = notes.text

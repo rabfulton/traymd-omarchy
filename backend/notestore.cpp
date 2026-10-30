@@ -1,4 +1,5 @@
 #include "notestore.h"
+#include "noteeditor.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -135,7 +136,14 @@ bool NoteStore::load(int index) {
 }
 
 void NoteStore::attachEditor(QQuickTextDocument *editor) {
-    if (editor && document()) editor->setTextDocument(document());
+    if (!editor || !m_current) return;
+    // Disconnect the old note before initializing the view for the next one.
+    if (auto *previous = m_editors.take(editor)) delete previous;
+    auto *attachment = new NoteEditor(editor, m_current);
+    m_editors.insert(editor, attachment);
+    connect(attachment, &QObject::destroyed, this, [this, editor, attachment] {
+        if (m_editors.value(editor) == attachment) m_editors.remove(editor);
+    });
 }
 
 bool NoteStore::save() {

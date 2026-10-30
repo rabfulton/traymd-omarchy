@@ -8,11 +8,13 @@ build_dir="${XDG_CACHE_HOME:-$HOME/.cache}/traymd-omarchy/build-$source_id"
 command -v omarchy >/dev/null || { echo "Omarchy is required." >&2; exit 1; }
 install_deps=true
 reset_settings=false
+restart_shell=true
 for argument in "$@"; do
     case "$argument" in
         --no-deps) install_deps=false ;;
         --reset-settings) reset_settings=true ;;
-        --help|-h) echo "Usage: ./install.sh [--no-deps] [--reset-settings]"; exit 0 ;;
+        --no-restart) restart_shell=false ;;
+        --help|-h) echo "Usage: ./install.sh [--no-deps] [--reset-settings] [--no-restart]"; exit 0 ;;
         *) echo "Unknown option: $argument" >&2; exit 1 ;;
     esac
 done
@@ -63,11 +65,16 @@ for file in manifest.json BarWidget.qml NotesWidget.qml NotesPanel.qml NotesPopu
     mv -f "$file_tmp" "$plugin_dir/$file"
 done
 python3 "$plugin_dir/scripts/backend-status.py" --record "$plugin_dir/TrayMDBackend/libtraymdbackend.so"
-omarchy-shell shell rescanPlugins
-# With no placement argument, Omarchy keeps the section chosen by plugin add.
-omarchy plugin enable traymd-omarchy
+python3 "$plugin_dir/scripts/install-update-hooks.py" "$plugin_dir"
 if $reset_settings; then python3 "$project_dir/scripts/reset-settings.py"; fi
-echo "Restarting the Omarchy shell to load the installed plugin…"
-omarchy restart shell
-echo "TrayMD Omarchy is enabled. Click the notes icon in the bar."
-echo "Toggle with: omarchy-shell shell toggle traymd-omarchy"
+if $restart_shell; then
+    omarchy-shell shell rescanPlugins
+    # With no placement argument, Omarchy keeps the section chosen by plugin add.
+    omarchy plugin enable traymd-omarchy
+    echo "Restarting the Omarchy shell to load the installed plugin…"
+    omarchy restart shell
+    echo "TrayMD Omarchy is enabled. Click the notes icon in the bar."
+    echo "Toggle with: omarchy-shell shell toggle traymd-omarchy"
+else
+    echo "TrayMD is prepared; Omarchy will restart the shell when the system update finishes."
+fi

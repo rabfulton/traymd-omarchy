@@ -1,5 +1,6 @@
 """Installer helper checks without changing the live desktop or using GitHub."""
 import importlib.util
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -21,6 +22,103 @@ def load_script(name):
 
 
 class InstallTests(unittest.TestCase):
+    def update_fixture(self, directory):
+        root = Path(directory) / "plugin with spaces"
+        (root / "scripts").mkdir(parents=True)
+        shutil.copy2(PROJECT / "scripts/after-update.sh", root / "scripts/after-update.sh")
+        (root / "scripts/backend-status.py").write_text('from pathlib import Path\nraise SystemExit(int((Path(__file__).parent.parent / "status").read_text()))\n')
+        (root / "status").write_text("1")
+        (root / "install.sh").write_text('''#!/usr/bin/env bash
+set -e
+printf 'install %s\\n' "$*" >> "$TRAYMD_TEST_EVENTS"
+if [[ ${TRAYMD_TEST_BUILD_FAIL:-0} == 1 ]]; then exit 7; fi
+printf 0 > "$(dirname "$0")/status"
+''')
+        commands = Path(directory) / "commands"
+        commands.mkdir()
+        omarchy = commands / "omarchy"
+        omarchy.write_text('#!/bin/sh\nprintf "omarchy %s\\n" "$*" >> "$TRAYMD_TEST_EVENTS"\n')
+        omarchy.chmod(0o755)
+        notify = commands / "notify-send"
+        notify.write_text('#!/bin/sh\nprintf "notification\\n" >> "$TRAYMD_TEST_EVENTS"\n')
+        notify.chmod(0o755)
+        events = Path(directory) / "events"
+        events.touch()
+        env = os.environ | {"PATH": str(commands) + ":" + os.environ["PATH"], "XDG_CACHE_HOME": str(Path(directory) / "cache"), "TRAYMD_TEST_EVENTS": str(events)}
+        env.pop("OMARCHY_UPDATE_LOGGED", None)
+        return root, events, env
+
+    def test_system_update_builds_before_host_restart_and_skips_current_backend(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, events, env = self.update_fixture(directory)
+            command = ["bash", str(root / "scripts/after-update.sh"), "system"]
+            result = subprocess.run(command, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(events.read_text(), "install --no-deps --no-restart\n")
+            events.write_text("")
+            self.assertEqual(subprocess.run(command, env=env, capture_output=True).returncode, 0)
+            self.assertEqual(events.read_text(), "")
+
+    def test_real_fast_forward_merge_prepares_backend_and_preserves_existing_hook(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, events, env = self.update_fixture(directory)
+
+            def git(*args):
+                return subprocess.check_output(["git", "-C", str(root), "-c", "user.name=TrayMD tests", "-c", "user.email=tests@example.invalid", *args], env=env, stderr=subprocess.STDOUT, text=True).strip()
+
+            git("init", "-q")
+            (root / ".gitignore").write_text("status\n")
+            (root / "version").write_text("one")
+            git("add", ".")
+            git("commit", "-qm", "first")
+            initial = git("rev-parse", "HEAD")
+            (root / "version").write_text("two")
+            git("commit", "-qam", "second")
+            updated = git("rev-parse", "HEAD")
+            git("checkout", "-q", "--detach", initial)
+            previous = root / ".git/hooks/post-merge"
+            previous.write_text('#!/bin/sh\nprintf "previous hook\\n" >> "$TRAYMD_TEST_EVENTS"\n')
+            previous.chmod(0o755)
+            hooks = load_script("install-update-hooks")
+            hooks.install_git_hook(root)
+            hooks.install_git_hook(root)  # Idempotent; no repeated wrapping.
+            notes = Path(directory) / "notes.md"
+            notes.write_text("keep my note")
+            git("merge", "--ff-only", updated)
+            self.assertEqual(events.read_text(), "previous hook\ninstall --no-deps\n")
+            self.assertEqual((root / "status").read_text(), "0")
+            self.assertEqual(notes.read_text(), "keep my note")
+            events.write_text("")
+            result = subprocess.run(["bash", str(root / "scripts/after-update.sh"), "plugin"], env=env, capture_output=True)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(events.read_text(), "omarchy restart shell\n")
+
+    def test_failed_update_retains_failure_status_and_log(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, events, env = self.update_fixture(directory)
+            env["TRAYMD_TEST_BUILD_FAIL"] = "1"
+            result = subprocess.run(["bash", str(root / "scripts/after-update.sh"), "plugin"], env=env, capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual((root / "status").read_text(), "1")
+            log = Path(env["XDG_CACHE_HOME"]) / "traymd-omarchy/update.log"
+            self.assertIn("Preparing TrayMD", log.read_text())
+            self.assertIn("notification", events.read_text())
+
+    def test_launcher_does_not_open_terminal_during_build_or_system_update(self):
+        launcher = load_script("launch-setup")
+        for lock_name in ("setup.lock", "omarchy-update.lock"):
+            with self.subTest(lock=lock_name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                cache = root / "cache/traymd-omarchy"
+                cache.mkdir(parents=True)
+                runtime = root / "runtime"
+                runtime.mkdir()
+                lock_path = cache / lock_name if lock_name == "setup.lock" else runtime / lock_name
+                with lock_path.open("a") as lock, patch.dict(os.environ, {"XDG_CACHE_HOME": str(root / "cache"), "XDG_RUNTIME_DIR": str(runtime)}), patch.object(launcher.subprocess, "Popen") as terminal:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    launcher.main()
+                    terminal.assert_not_called()
+
     def test_backend_marker_detects_native_source_and_qt_changes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

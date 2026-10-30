@@ -37,11 +37,18 @@ env -u WAYLAND_DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= QT_SCALE_
     TRAYMD_TEST_PLUGIN_DIR="$preview_dir/Plugin" \
     TRAYMD_UNPREPARED_PLUGIN_DIR="$preview_dir/UnpreparedPlugin" \
     TRAYMD_DOCS_PREVIEW="${TRAYMD_DOCS_PREVIEW:-0}" \
+    TRAYMD_TEST_RENDER_PREFIX="$build_dir/render-regression" \
     TRAYMD_TEST_SCREENSHOT="${TRAYMD_SCREENSHOT_PATH:-$build_dir/preview.png}" \
     timeout 20s quickshell --path "$1" --no-color
 }
 run_ui "$preview_dir/shell.qml" > "$build_dir/ui-test.log" 2>&1 || status=$?
 if (( status != 0 )); then cat "$build_dir/ui-test.log"; exit "$status"; fi
+python3 - "$build_dir/render-regression" <<'PY'
+from pathlib import Path
+import sys
+path = sys.argv[1]
+assert Path(path + ".before-switch.png").read_bytes() == Path(path + ".after-switch.png").read_bytes(), "Switching notes left stale text or changed the note's rendering"
+PY
 python3 - "$test_dir" <<'PY'
 import hashlib, json, sys
 from pathlib import Path

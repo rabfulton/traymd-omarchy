@@ -93,9 +93,9 @@ change the size or choose between the screen centre and the bar icon.
 omarchy plugin update traymd-omarchy
 ```
 
-If the native backend needs rebuilding, setup starts automatically when the
-shell detects the update; you do not need to click the notes icon to trigger it.
-Omarchy's plugin updater has no build hook, so preparation follows its rescan.
+The update builds the editor if needed and restarts the shell before returning.
+Regular `omarchy update` also prepares the editor after Qt upgrades, using
+Omarchy's final shell restart. There is no separate icon click or setup terminal.
 
 Upgrading from an older build and still seeing the old editor? Rebuild once:
 
@@ -103,7 +103,8 @@ Upgrading from an older build and still seeing the old editor? Rebuild once:
 bash ~/.config/omarchy/plugins/traymd-omarchy/install.sh
 ```
 
-This also restarts the shell and activates automatic setup for future updates.
+This also installs the update hooks and restarts the shell. Future updates use
+the single operation above.
 
 Already installed from a development checkout? From that checkout, run:
 
