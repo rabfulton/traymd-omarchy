@@ -6,6 +6,7 @@ import Quickshell
 import qs.Commons as Commons
 import qs.Ui
 import "Plugin" as Plugin
+import "UnpreparedPlugin" as Unprepared
 
 // Run from build/preview with the installed shell's Commons and Ui modules.
 // No visible windows or changes to the running desktop are needed.
@@ -27,11 +28,29 @@ ShellRoot {
             fontFamily: "monospace"
         }
 
-        Plugin.BarWidget {
+        Plugin.NotesWidget {
             id: widget
             bar: testBar
             visible: false
             settings: ({ notesDirectory: Quickshell.env("TRAYMD_TEST_NOTES") })
+        }
+
+        Loader {
+            id: bootstrap
+            visible: false
+            sourceComponent: Component {
+                Plugin.BarWidget {
+                    bar: testBar
+                    pluginDirectory: Quickshell.env("TRAYMD_TEST_PLUGIN_DIR")
+                    settings: ({ notesDirectory: Quickshell.env("TRAYMD_TEST_NOTES") })
+                }
+            }
+        }
+        Unprepared.BarWidget {
+            id: unprepared
+            visible: false
+            bar: testBar
+            pluginDirectory: Quickshell.env("TRAYMD_UNPREPARED_PLUGIN_DIR")
         }
 
         Plugin.NotesPanel {
@@ -50,16 +69,27 @@ ShellRoot {
 
     Timer {
         property int phase: 0
+        property bool busy: false
         interval: 150
         repeat: true
         running: true
         onTriggered: {
+            if (busy) return
+            busy = true
+            try {
             if (!widget.notes.initialize(Quickshell.env("TRAYMD_TEST_NOTES"))) {
                 console.error("Smoke test failed:", widget.notes.error)
                 Qt.exit(1)
                 return
             }
             if (phase === 0) {
+                if (!bootstrap.item || !bootstrap.item.ready || bootstrap.item.implicitWidth <= 0) {
+                    console.error("Bootstrap did not load the prepared native widget"); Qt.exit(1); return
+                }
+                if (unprepared.ready || unprepared.implicitWidth <= 0 || unprepared.opened) {
+                    console.error("Fresh install did not show a setup icon safely"); Qt.exit(1); return
+                }
+                bootstrap.active = false
                 if (panel.contentHeight !== 540 || panel.contentWidth !== 432) {
                     console.error("First-run monitor proportions failed", panel.contentWidth, panel.contentHeight)
                     Qt.exit(1); return
@@ -193,6 +223,32 @@ ShellRoot {
                     console.error("Editor menu must render inside the app"); Qt.exit(1); return
                 }
                 panel.editMenu.close()
+                widget.notes.text = "- [ ] Pack a notebook"
+                panel.textEditor.cursorPosition = panel.textEditor.length
+                phase = 4
+                return
+            }
+            if (phase === 4) {
+                const item = panel.decorationItems.itemAt(0)
+                let checkbox = null
+                if (item) for (const child of item.children) if (child.objectName === "taskCheckbox") checkbox = child
+                if (!checkbox || !checkbox.visible) { console.error("Task checkbox missing"); Qt.exit(1); return }
+                const cursor = panel.textEditor.cursorPosition
+                keyEvents.mouseClick(checkbox, checkbox.width / 2, checkbox.height / 2, Qt.LeftButton, Qt.NoModifier, 0)
+                if (widget.notes.text !== "- [x] Pack a notebook" || panel.textEditor.cursorPosition !== cursor) {
+                    console.error("Checkbox click did not update source while preserving cursor", widget.notes.text)
+                    Qt.exit(1); return
+                }
+                keyEvents.keyClick(Qt.Key_Z, Qt.ControlModifier, 0)
+                if (widget.notes.text !== "- [ ] Pack a notebook") { console.error("Task toggle undo failed"); Qt.exit(1); return }
+                panel.textEditor.redo()
+                if (widget.notes.text !== "- [x] Pack a notebook") { console.error("Task toggle redo failed"); Qt.exit(1); return }
+                panel.textEditor.cursorPosition = panel.textEditor.length
+                keyEvents.keyClick(Qt.Key_Return, Qt.NoModifier, 0)
+                if (widget.notes.text !== "- [x] Pack a notebook\n- [ ] ") { console.error("Task continuation failed"); Qt.exit(1); return }
+                keyEvents.keyClick(Qt.Key_Return, Qt.NoModifier, 0)
+                if (widget.notes.text !== "- [x] Pack a notebook\n") { console.error("Empty task exit failed"); Qt.exit(1); return }
+                if (!widget.notes.save()) { console.error("Saving tasks failed"); Qt.exit(1); return }
             }
             running = false
             const docsPreview = Quickshell.env("TRAYMD_DOCS_PREVIEW") === "1"
@@ -204,7 +260,7 @@ ShellRoot {
                 window.height = 560
             }
             const source = docsPreview
-                ? "# A few things to remember\n## This week\n\nMake room for **small ideas** and *good coffee*.\n\n- Book the train for Friday\n- Pick up a notebook on the way home\n\n### Keep this handy\n```python\ndef slow_morning():\n    return \"coffee, then everything else\"\n```\n\n[Explore the Omarchy manual](https://learn.omarchy.org)\n\n*Alt+← / Alt+→ to browse notes*"
+                ? "# A few things to remember\n## This week\n\nMake room for **small ideas** and *good coffee*.\n\n- [x] Book the train for Friday\n- [ ] Pick up a notebook on the way home\n\n### Keep this handy\n```python\ndef slow_morning():\n    return \"coffee, then everything else\"\n```\n\n[Explore the Omarchy manual](https://learn.omarchy.org)\n\n*Alt+← / Alt+→ to browse notes*"
                 : "# Heading\n## Subheading\n### Smaller heading\n\n**Bold**, *italic* and ***both***.\n\n- One quick thought\n- Another thing to remember\n\n```python\ndef remember():\n    return \"A quick note\"\n```\n\n[Example link](https://example.com)"
             widget.notes.text = source
             if (panel.textEditor.text !== source) {
@@ -241,6 +297,7 @@ ShellRoot {
                 result.saveToFile(Quickshell.env("TRAYMD_TEST_SCREENSHOT"))
                 Qt.quit()
             })
+            } finally { busy = false }
         }
     }
 }

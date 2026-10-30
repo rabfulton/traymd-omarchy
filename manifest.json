@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "traymd-omarchy",
   "name": "TrayMD Omarchy",
-  "version": "0.5.0",
+  "version": "0.7.0",
   "author": "rabfulton",
   "description": "Quick Markdown notes in a theme-aware bar popup",
   "kinds": ["bar-widget"],

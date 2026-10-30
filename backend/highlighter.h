@@ -36,6 +36,8 @@ public:
     Q_INVOKABLE int moveCursor(int position, int direction) const;
     Q_INVOKABLE int editKey(int position, int start, int end, int key);
     Q_INVOKABLE QString linkAt(int position) const;
+    Q_INVOKABLE bool toggleTask(int position);
+    Q_INVOKABLE int taskContentPosition(int position) const;
 signals:
     void textDocumentChanged();
     void paletteChanged();

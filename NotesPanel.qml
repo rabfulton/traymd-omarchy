@@ -17,6 +17,7 @@ NotesPopup {
     readonly property alias markdown: renderer
     readonly property alias editMenu: editorMenu
     readonly property alias noteToolbar: tools
+    readonly property alias decorationItems: decorationRepeater
     readonly property color foreground: Commons.Color.popups.text
     readonly property color secondary: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.55)
     // QText backgrounds use an opaque blend for consistent Qt Quick rendering.
@@ -215,6 +216,11 @@ NotesPopup {
                 }
                 Component.onCompleted: syncText()
                 onTextChanged: if (Backend.Notes.ready) Backend.Notes.text = text
+                onCursorPositionChanged: {
+                    if (selectionStart !== selectionEnd) return
+                    const position = renderer.taskContentPosition(cursorPosition)
+                    if (position !== cursorPosition) cursorPosition = position
+                }
 
                 Connections {
                     target: Backend.Notes
@@ -251,6 +257,7 @@ NotesPopup {
                 }
 
                 Repeater {
+                    id: decorationRepeater
                     model: renderer.decorations
                     delegate: Item {
                         required property var modelData
@@ -280,6 +287,38 @@ NotesPopup {
                             text: "•"
                             color: Commons.Color.accent
                             font: editor.font
+                        }
+                        Rectangle {
+                            id: taskBox
+                            objectName: "taskCheckbox"
+                            visible: modelData.kind === "task"
+                            width: Math.max(12, Math.round(editor.font.pixelSize * 0.85))
+                            height: width
+                            anchors.verticalCenter: parent.verticalCenter
+                            radius: 2
+                            color: modelData.checked ? Commons.Color.accent : "transparent"
+                            border.color: Commons.Color.accent
+                            border.width: 1
+                            activeFocusOnTab: visible
+                            Accessible.role: Accessible.CheckBox
+                            Accessible.name: modelData.label || "Task"
+                            Accessible.checked: modelData.checked || false
+                            Accessible.onPressAction: renderer.toggleTask(modelData.position)
+                            Keys.onSpacePressed: renderer.toggleTask(modelData.position)
+                            Keys.onReturnPressed: renderer.toggleTask(modelData.position)
+                            Text {
+                                anchors.centerIn: parent
+                                text: "✓"
+                                visible: modelData.checked || false
+                                color: Commons.Color.popups.background
+                                font.family: editor.font.family
+                                font.pixelSize: Math.round(taskBox.height * 0.85)
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: { root.focusEditor(); renderer.toggleTask(modelData.position) }
+                            }
                         }
                         Rectangle {
                             visible: modelData.kind === "rule"

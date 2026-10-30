@@ -437,6 +437,78 @@ private slots:
         keys.reload();
         QVERIFY(!keys.error().isEmpty());
     }
+
+    void taskListsRenderToggleAndKeepSource() {
+        QTextDocument document;
+        const QString source = "- [ ] Pack **a notebook**\n  * [X] café 📝\n+ [x] done\n- [y] ordinary item";
+        document.setPlainText(source);
+        MarkdownHighlighter renderer;
+        renderer.setDocument(&document);
+        renderer.rehighlight();
+        const auto decorations = renderer.decorations();
+        QCOMPARE(decorations.size(), 4);
+        for (int i = 0; i < 3; ++i) QCOMPARE(decorations[i].toMap()["kind"].toString(), "task");
+        QVERIFY(!decorations[0].toMap()["checked"].toBool());
+        QVERIFY(decorations[1].toMap()["checked"].toBool());
+        QVERIFY(visibleText(document).startsWith("Pack a notebook\n"));
+        QVERIFY(styleAt(document, source.indexOf("café")).fontStrikeOut());
+        QCOMPARE(renderer.moveCursor(0, 0), 6);
+        QCOMPARE(renderer.taskContentPosition(4), 6);
+        QVERIFY(renderer.toggleTask(0));
+        QCOMPARE(document.toPlainText(), QString(source).replace(0, 6, "- [x] "));
+        document.undo();
+        QCOMPARE(document.toPlainText(), source);
+        renderer.rehighlight();
+        QVERIFY(renderer.toggleTask(source.indexOf("  *")));
+        QVERIFY(document.toPlainText().contains("  * [ ] café 📝"));
+        document.undo();
+        QCOMPARE(document.toPlainText(), source);
+        QVERIFY(!renderer.toggleTask(source.indexOf("- [y]")));
+    }
+
+    void taskListsContinueUncheckedAndExitEmptyItems() {
+        for (const auto &source : {QString("- [ ] task"), QString("* [x] task"), QString("  + [X] task")}) {
+            QTextDocument document;
+            document.setPlainText(source);
+            MarkdownHighlighter renderer;
+            renderer.setDocument(&document);
+            renderer.rehighlight();
+            int pos = source.size();
+            pos = renderer.editKey(pos, pos, pos, Qt::Key_Return);
+            const QString indent = source.startsWith("  ") ? "  " : "";
+            const auto marker = source.trimmed().left(1);
+            const auto continued = source + "\n" + indent + marker + " [ ] ";
+            QCOMPARE(document.toPlainText(), continued);
+            pos = renderer.editKey(pos, pos, pos, Qt::Key_Return);
+            QCOMPARE(document.toPlainText(), source + "\n" + indent);
+            document.undo();
+            QCOMPARE(document.toPlainText(), continued);
+        }
+        QTextDocument document;
+        document.setPlainText("- [ ] task");
+        MarkdownHighlighter renderer;
+        renderer.setDocument(&document);
+        renderer.rehighlight();
+        QCOMPARE(renderer.editKey(6, 6, 6, Qt::Key_Backspace), 0);
+        QCOMPARE(document.toPlainText(), "task");
+        document.undo();
+        QCOMPARE(document.toPlainText(), "- [ ] task");
+    }
+
+    void tasksInsideCodeStayLiteral() {
+        QTextDocument document;
+        const QString source = "```markdown\n- [ ] literal\n```\n\ntext - [ ] literal";
+        document.setPlainText(source);
+        MarkdownHighlighter renderer;
+        renderer.setDocument(&document);
+        renderer.rehighlight();
+        QCOMPARE(renderer.decorations().size(), 1);
+        QCOMPARE(renderer.decorations().first().toMap()["kind"].toString(), "code");
+        QVERIFY(!renderer.toggleTask(source.indexOf("- [ ]")));
+        const int pos = source.indexOf("literal") + 7;
+        QCOMPARE(renderer.editKey(pos, pos, pos, Qt::Key_Return), -1);
+        QCOMPARE(document.toPlainText(), source);
+    }
 };
 
 QTEST_MAIN(BackendTest)

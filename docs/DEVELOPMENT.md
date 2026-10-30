@@ -9,18 +9,23 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-The installable files are staged in `build/plugin`. `./install.sh` installs
-missing dependencies through `omarchy pkg add`, builds in the user's cache,
-tests, installs the files and enables the plugin through Omarchy. Pass
-`--no-deps` to skip package installation. It preserves an installed git checkout
-so `omarchy plugin update` can manage the source. Rerun the installer after an
-update; the installer restarts the shell to reload the native library.
-Use `./install.sh --reset-settings` to clear only saved popup appearance
-preferences (with a backup), keeping notes and other shell settings.
+The installable files are staged in `build/plugin`. `BarWidget.qml` is a QML-only
+bootstrap, so a freshly cloned plugin can appear in the bar without a compiled
+backend. It checks `scripts/backend-status.py` before loading `NotesWidget.qml`.
+The marker fingerprints native sources and the installed Qt version. If a
+build is needed, clicking the icon launches `scripts/first-run.sh` in a terminal.
 
-Omarchy's plugin-add command clones plugins; it does not compile native
-backends. The short installation sequence in the README deliberately adds
-the plugin disabled, builds it, then enables it. No prebuilt library is shipped.
+`./install.sh` installs missing dependencies through `omarchy pkg add`, builds
+in the user's cache, tests, installs and restarts the shell. It preserves the
+Git checkout and the selected bar section. Pass `--no-deps` to skip package
+installation, or `--reset-settings` to reset popup appearance with a backup.
+Generated native files and `.native-build.json` are ignored by Git.
+
+Release installs use `omarchy plugin add … --enable`; updates use
+`omarchy plugin update traymd-omarchy`. The next open checks whether a rebuild
+is required. There are no hooks into Omarchy's own updater and no prebuilt
+library downloads. `scripts/switch-to-release.py` migrates a copied development
+install, backing up the shell configuration and preserving note/settings data.
 
 ## Editor
 

@@ -4,19 +4,20 @@ Quick Markdown notes for Omarchy. Open a small popup, jot something down and
 get back to what you were doing. Notes save automatically, Markdown renders as
 you type, and colours follow your theme.
 
-![TrayMD Omarchy showing headings, emphasis, a list, a code block and a link](assets/screenshot.png)
+![TrayMD Omarchy showing headings, emphasis, task lists, a code block and a link](assets/screenshot.png)
 
 ## Installation
 
 For the Quickshell-based Omarchy desktop:
 
 ```bash
-omarchy plugin add https://github.com/rabfulton/traymd-omarchy.git --yes
-bash ~/.config/omarchy/plugins/traymd-omarchy/install.sh
+omarchy plugin add https://github.com/rabfulton/traymd-omarchy.git --enable
 ```
 
-The installer adds the required packages through Omarchy, builds the plugin,
-enables its notes icon and restarts the shell.
+Choose **left**, **center** or **right** when Omarchy asks where to put the icon.
+Click the notes icon once to finish setup in a terminal. It installs any missing
+build packages, builds the editor and restarts the shell. Your chosen position
+is kept.
 
 ## Usage
 
@@ -27,6 +28,10 @@ your default browser.
 
 Enter continues a list; Enter on an empty item ends it. The right-click menu
 includes undo, redo, cut, copy, paste and select all.
+
+Task lists work too: type `- [ ] To do` or `- [x] Done`, then click the
+checkbox to toggle it. Enter adds an unchecked task; Enter on an empty task
+ends the list. Task lists stay as ordinary Markdown when saved.
 
 ## Shortcuts
 
@@ -83,10 +88,20 @@ change the size or choose between the screen centre and the bar icon.
 
 ```bash
 omarchy plugin update traymd-omarchy
-bash ~/.config/omarchy/plugins/traymd-omarchy/install.sh
 ```
 
-For an existing local checkout, run `./install.sh` there.
+Click the notes icon after updating. If the native backend needs rebuilding,
+setup opens automatically; otherwise your notes open immediately.
+
+Already installed from a development checkout? From that checkout, run:
+
+```bash
+python3 scripts/switch-to-release.py
+```
+
+This backs up settings, replaces the copied plugin with a GitHub checkout and
+uses Omarchy's normal placement prompt. Notes and app configuration are kept.
+For development installs, `./install.sh` is still available.
 Remove with `omarchy plugin remove traymd-omarchy`; your notes are kept.
 
 ## Development and license

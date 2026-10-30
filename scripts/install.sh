@@ -17,7 +17,7 @@ for argument in "$@"; do
     esac
 done
 if $install_deps; then
-    omarchy pkg add base-devel cmake qt6-base qt6-declarative glib2
+    omarchy pkg add base-devel cmake qt6-base qt6-declarative glib2 python
 fi
 cmake -S "$project_dir" -B "$build_dir" -DCMAKE_BUILD_TYPE=Release
 cmake --build "$build_dir" --parallel
@@ -33,6 +33,21 @@ if [[ -e $plugin_dir ]]; then
     echo "Previous plugin backed up to $backup_dir/plugin"
 fi
 mkdir -p "$plugin_dir"
+if [[ $(realpath "$project_dir") != $(realpath "$plugin_dir") ]]; then
+    # A development install needs the same bootstrap sources as a git install.
+    # Never copy .git metadata or build output over the installed checkout.
+    python3 - "$project_dir" "$plugin_dir" <<'PY'
+from pathlib import Path
+import shutil
+import sys
+source, target = map(Path, sys.argv[1:])
+for name in ("backend", "scripts", "tests", "docs", "assets"):
+    shutil.copytree(source / name, target / name, dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+for name in ("CMakeLists.txt", "README.md", "install.sh", ".gitignore"):
+    shutil.copy2(source / name, target / name)
+PY
+fi
 mkdir -p "$plugin_dir/TrayMDBackend"
 # Replace the library inode rather than truncating one the shell may have
 # mapped into memory. Truncation could crash a running shell on upgrade.
@@ -41,14 +56,16 @@ cp "$build_dir/plugin/TrayMDBackend/libtraymdbackend.so" "$library_tmp"
 chmod 755 "$library_tmp"
 mv -f "$library_tmp" "$plugin_dir/TrayMDBackend/libtraymdbackend.so"
 printf 'module TrayMDBackend\nplugin traymdbackend %s\n' "$plugin_dir/TrayMDBackend" > "$plugin_dir/TrayMDBackend/qmldir"
-for file in manifest.json BarWidget.qml NotesPanel.qml NotesPopup.qml PopupSettings.qml NoteButton.qml EditorMenu.qml EditorMenuItem.qml LICENSE; do
+for file in manifest.json BarWidget.qml NotesWidget.qml NotesPanel.qml NotesPopup.qml PopupSettings.qml NoteButton.qml EditorMenu.qml EditorMenuItem.qml LICENSE; do
     file_tmp=$(mktemp "$plugin_dir/.install.XXXXXX")
     cp "$build_dir/plugin/$file" "$file_tmp"
     chmod 644 "$file_tmp"
     mv -f "$file_tmp" "$plugin_dir/$file"
 done
+python3 "$plugin_dir/scripts/backend-status.py" --record "$plugin_dir/TrayMDBackend/libtraymdbackend.so"
 omarchy-shell shell rescanPlugins
-omarchy plugin enable traymd-omarchy --section right
+# With no placement argument, Omarchy keeps the section chosen by plugin add.
+omarchy plugin enable traymd-omarchy
 if $reset_settings; then python3 "$project_dir/scripts/reset-settings.py"; fi
 echo "Restarting the Omarchy shell to load the installed plugin…"
 omarchy restart shell

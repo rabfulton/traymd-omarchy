@@ -3,6 +3,8 @@
 /build-*/
 /cmake-build-*/
 /TrayMDBackend/
+/.native-build.json
+/.native-build-*
 
 # Compiler and linker output
 *.o

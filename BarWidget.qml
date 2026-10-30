@@ -1,61 +1,102 @@
 import QtQuick
-import qs.Commons
-import qs.Commons as Commons
-import qs.Ui
-import "TrayMDBackend" as Backend
+import Quickshell
+import Quickshell.Io
+import qs.Ui as Ui
 
-Panel {
+// This entry point intentionally has no native imports. A fresh git install
+// can show its icon and finish setup before loading the compiled editor.
+Ui.BarWidget {
     id: root
     moduleName: "traymd-omarchy"
-    // The shell's generic summon/toggle route selects the focused monitor.
-    manageIpc: false
-    readonly property var notes: Backend.Notes
-    implicitWidth: button.implicitWidth
-    implicitHeight: button.implicitHeight
+    property string pluginDirectory: Quickshell.env("HOME") + "/.config/omarchy/plugins/traymd-omarchy"
+    property bool pendingOpen: false
+    property bool pendingNewNote: false
+    property bool setupLaunching: false
+    readonly property bool ready: editorLoader.status === Loader.Ready
+    readonly property bool opened: ready && editorLoader.item.opened
+    implicitWidth: ready ? editorLoader.item.implicitWidth : setupButton.implicitWidth
+    implicitHeight: ready ? editorLoader.item.implicitHeight : setupButton.implicitHeight
 
     function open() {
-        Backend.Notes.initialize(setting("notesDirectory", ""))
-        controller.show()
+        pendingOpen = true
+        if (!check.running) check.running = true
     }
-
     function close() {
-        // Keep unsaved text visible when a write fails.
-        if (Backend.Notes.save()) controller.hide()
+        pendingOpen = false
+        pendingNewNote = false
+        if (ready) editorLoader.item.close()
     }
-
+    function toggle() { if (opened) close(); else open() }
     function closeForPopoutSwitch() {}
-
-    function updateSettings(values) {
-        const entry = Object.assign({}, root.settings, values, { id: root.moduleName })
-        root.settings = entry
-        if (bar && bar.shell) bar.shell.updateEntryInline(root.moduleName, entry)
-    }
-
-    WidgetButton {
-        id: button
-        anchors.fill: parent
-        bar: root.bar
-        text: "󰎞"
-        tooltipText: "Notes"
-        active: root.opened
-        onPressed: function(mouseButton) {
-            if (mouseButton === Qt.MiddleButton) {
-                root.open()
-                Backend.Notes.newNote()
-            } else root.toggle()
+    function showEditor() {
+        pendingOpen = false
+        editorLoader.item.open()
+        if (pendingNewNote) {
+            pendingNewNote = false
+            editorLoader.item.notes.newNote()
         }
     }
-
-    NotesPanel {
-        anchorItem: button
-        bar: root.bar
-        owner: root
-        open: root.opened
-        popoutSwitchClosing: root.popoutSwitchClosing
-        preferredWidth: Number(root.setting("width", 0))
-        preferredHeight: Number(root.setting("height", 0))
-        editorFontSize: Number(root.setting("fontSize", Style.font.heading))
-        placement: String(root.setting("placement", "anchor"))
-        onSettingsEdited: function(values) { root.updateSettings(values) }
+    function finishSetup() {
+        if (setupLaunching) return
+        setupLaunching = true
+        launchCooldown.restart()
+        Quickshell.execDetached(["omarchy-launch-terminal", "bash", pluginDirectory + "/scripts/first-run.sh"])
     }
+    function injectEditor() {
+        if (!editorLoader.item) return
+        editorLoader.item.bar = root.bar
+        editorLoader.item.settings = root.settings
+        editorLoader.item.activateFromBar = function(button) {
+            if (button === Qt.MiddleButton) { root.pendingNewNote = true; root.open() }
+            else root.toggle()
+        }
+    }
+    onBarChanged: injectEditor()
+    onSettingsChanged: injectEditor()
+    Component.onCompleted: check.running = true
+
+    Process {
+        id: check
+        command: ["python3", root.pluginDirectory + "/scripts/backend-status.py"]
+        onExited: function(code) {
+            if (code === 0) {
+                if (editorLoader.status === Loader.Error) {
+                    if (root.pendingOpen) root.finishSetup()
+                    root.pendingOpen = false
+                } else if (!editorLoader.active) editorLoader.active = true
+                else if (root.pendingOpen && root.ready) {
+                    root.showEditor()
+                }
+            } else {
+                editorLoader.active = false
+                if (root.pendingOpen) {
+                    root.pendingOpen = false
+                    root.finishSetup()
+                }
+            }
+        }
+    }
+    Loader {
+        id: editorLoader
+        anchors.fill: parent
+        active: false
+        source: Qt.resolvedUrl("NotesWidget.qml")
+        onLoaded: {
+            root.injectEditor()
+            if (root.pendingOpen) {
+                root.showEditor()
+            }
+        }
+        onStatusChanged: if (status === Loader.Error) root.pendingOpen = false
+    }
+    Ui.WidgetButton {
+        id: setupButton
+        anchors.fill: parent
+        visible: !root.ready
+        bar: root.bar
+        text: "󰎞"
+        tooltipText: root.setupLaunching ? "Setting up notes…" : "Notes · click to finish setup"
+        onPressed: root.open()
+    }
+    Timer { id: launchCooldown; interval: 3000; onTriggered: root.setupLaunching = false }
 }

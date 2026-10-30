@@ -55,11 +55,18 @@ struct BlockData : QTextBlockUserData {
     QList<Span> hidden;
     QString decoration;
     int decorationOffset = 0;
+    bool checked = false;
+    int taskContentStart = 0;
+    QString taskLabel;
     QString language;
     MarkydCodeScanState scanState{};
 };
 const BlockData *data(const QTextBlock &block) {
     return dynamic_cast<const BlockData *>(block.userData());
+}
+const QRegularExpression &taskExpression() {
+    static const QRegularExpression expression(R"(^([ \t]*)([-*+]) +\[([ xX])\](?:[ \t]+(.*)|$))");
+    return expression;
 }
 }
 
@@ -107,7 +114,8 @@ QVariantList MarkdownHighlighter::decorations() const {
         }
         flush();
         if (info && !info->decoration.isEmpty())
-            result.append(QVariantMap{{"position", block.position() + info->decorationOffset}, {"kind", info->decoration}});
+            result.append(QVariantMap{{"position", block.position() + info->decorationOffset}, {"kind", info->decoration},
+                {"checked", info->checked}, {"label", info->taskLabel}});
     }
     flush();
     return result;
@@ -119,6 +127,9 @@ int MarkdownHighlighter::moveCursor(int position, int direction) const {
     const auto block = document()->findBlock(position);
     const auto *info = data(block);
     if (!info) return position;
+    if (info->decoration == "task" && position >= block.position() + info->decorationOffset
+        && position < block.position() + info->taskContentStart)
+        return direction < 0 ? qMax(0, block.position() - 1) : block.position() + info->taskContentStart;
     for (const auto &span : info->hidden) {
         const int start = block.position() + span.start;
         const int end = start + span.length;
@@ -139,6 +150,14 @@ int MarkdownHighlighter::editKey(int position, int start, int end, int key) {
     QTextCursor cursor(document());
     cursor.setPosition(position);
     const auto *info = data(block);
+    if (key == Qt::Key_Backspace && info && info->decoration == "task" && offset == info->taskContentStart) {
+        cursor.beginEditBlock();
+        cursor.setPosition(block.position() + info->decorationOffset);
+        cursor.setPosition(position, QTextCursor::KeepAnchor);
+        cursor.removeSelectedText();
+        cursor.endEditBlock();
+        return cursor.position();
+    }
     if (key == Qt::Key_Backspace && info) {
         for (const auto &span : info->hidden) {
             const int a = block.position() + span.start, b = a + span.length;
@@ -158,6 +177,21 @@ int MarkdownHighlighter::editKey(int position, int start, int end, int key) {
     if (key != Qt::Key_Return && key != Qt::Key_Enter) return -1;
     // Fence lines and code content never continue Markdown list markers.
     if (block.userState() > 0 || QRegularExpression(R"(^\s*(`{3,}|~{3,}))").match(text).hasMatch()) return -1;
+    const auto task = taskExpression().match(text);
+    if (task.hasMatch()) {
+        const int contentStart = task.capturedStart(4) >= 0 ? task.capturedStart(4) : text.size();
+        if (offset < contentStart) return -1;
+        cursor.beginEditBlock();
+        if (task.captured(4).trimmed().isEmpty()) {
+            cursor.setPosition(block.position() + task.capturedLength(1));
+            cursor.setPosition(block.position() + text.size(), QTextCursor::KeepAnchor);
+            cursor.removeSelectedText();
+        } else {
+            cursor.insertText("\n" + task.captured(1) + task.captured(2) + " [ ] ");
+        }
+        cursor.endEditBlock();
+        return cursor.position();
+    }
     static const QRegularExpression list(R"(^(\s*)([-*+]|\d+\.) (.*)$)");
     const auto match = list.match(text);
     if (!match.hasMatch()) return -1;
@@ -186,6 +220,34 @@ QString MarkdownHighlighter::linkAt(int position) const {
             return range.format.anchorHref();
     }
     return {};
+}
+
+bool MarkdownHighlighter::toggleTask(int position) {
+    if (!document()) return false;
+    const auto block = document()->findBlock(position);
+    const auto *info = data(block);
+    if (!info || info->decoration != "task") return false;
+    const auto match = taskExpression().match(block.text());
+    if (!match.hasMatch()) return false;
+    QTextCursor cursor(document());
+    cursor.beginEditBlock();
+    cursor.setPosition(block.position() + match.capturedStart(3));
+    cursor.setPosition(cursor.position() + 1, QTextCursor::KeepAnchor);
+    cursor.insertText(match.captured(3) == " " ? "x" : " ");
+    cursor.endEditBlock();
+    return true;
+}
+
+int MarkdownHighlighter::taskContentPosition(int position) const {
+    if (!document()) return position;
+    const auto block = document()->findBlock(position);
+    const auto *info = data(block);
+    if (!info || info->decoration != "task") return position;
+    const auto match = taskExpression().match(block.text());
+    if (!match.hasMatch()) return position;
+    const int content = match.capturedStart(4) >= 0 ? match.capturedStart(4) : block.text().size();
+    return position >= block.position() + match.capturedLength(1) && position < block.position() + content
+        ? block.position() + content : position;
 }
 
 void MarkdownHighlighter::highlightBlock(const QString &text) {
@@ -246,6 +308,7 @@ void MarkdownHighlighter::highlightBlock(const QString &text) {
 
     static const QRegularExpression heading(R"(^(#{1,6}) (.*)$)");
     const auto h = heading.match(text);
+    const auto task = taskExpression().match(text);
     int contentStart = 0;
     if (h.hasMatch()) {
         QTextCharFormat style;
@@ -265,6 +328,25 @@ void MarkdownHighlighter::highlightBlock(const QString &text) {
         setFormat(0, text.size(), quote);
         contentStart = 2;
         info->hidden.append({0, 2});
+    } else if (task.hasMatch()) {
+        const int marker = task.capturedLength(1);
+        contentStart = task.capturedStart(4) >= 0 ? task.capturedStart(4) : text.size();
+        info->decoration = "task";
+        info->decorationOffset = marker;
+        info->checked = task.captured(3) != " ";
+        info->taskContentStart = contentStart;
+        info->taskLabel = task.captured(4);
+        // Reserve a normal list-marker width for the checkbox, collapsing
+        // the remaining Markdown syntax without changing source positions.
+        QTextCharFormat markerStyle; markerStyle.setForeground(Qt::transparent);
+        setFormat(marker, 2, markerStyle);
+        info->hidden.append({marker + 2, contentStart - marker - 2});
+        if (info->checked) {
+            QTextCharFormat completed;
+            completed.setFontStrikeOut(true);
+            completed.setForeground(m_muted);
+            setFormat(contentStart, text.size() - contentStart, completed);
+        }
     } else if (QRegularExpression(R"(^\s*([-*])\s+)").match(text).hasMatch()) {
         const int marker = text.indexOf(QRegularExpression("[-*]"));
         QTextCharFormat bullet; bullet.setForeground(Qt::transparent);
