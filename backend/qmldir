@@ -1,0 +1,2 @@
+module TrayMDBackend
+plugin traymdbackend @TRAYMD_BACKEND_PATH@

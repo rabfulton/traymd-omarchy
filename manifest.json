@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "traymd-omarchy",
+  "name": "TrayMD Omarchy",
+  "version": "0.5.0",
+  "author": "rabfulton",
+  "description": "Quick Markdown notes in a theme-aware bar popup",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "barWidget": {
+    "displayName": "Notes",
+    "description": "Quick Markdown notes",
+    "category": "Utilities",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

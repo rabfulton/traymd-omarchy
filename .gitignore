@@ -1,0 +1,40 @@
+# Build directories and generated QML backend
+/build/
+/build-*/
+/cmake-build-*/
+/TrayMDBackend/
+
+# Compiler and linker output
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dll
+*.dylib
+*.exe
+*.pdb
+*.d
+
+# CMake output, including accidental in-source builds
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+Makefile
+*_autogen/
+.qt/
+.cache/
+compile_commands.json
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Local logs and editor temporary files
+*.log
+*.swp
+*.swo
+*~
+.DS_Store
