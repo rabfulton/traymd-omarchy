@@ -1,13 +1,14 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Hyprland
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
 
 // Adapted from Omarchy's KeyboardPanel. This card-sized overlay stays above
 // normal application windows, without intercepting clicks outside the card.
-// A short focus prime allows summoning from a global keyboard shortcut.
+// A focus grab retains keyboard input when summoned away from the pointer.
 PanelWindow {
   id: root
 
@@ -75,6 +76,17 @@ PanelWindow {
     : WlrKeyboardFocus.None
 
   onBackingWindowVisibleChanged: beginFocusPrime()
+
+  // Keep the focus acquired by the initial Exclusive phase when switching
+  // to OnDemand, even if follow-mouse points at another application. Clicking
+  // outside clears the grab naturally; the note stays open for reference.
+  HyprlandFocusGrab {
+    windows: [root]
+    active: root.open && root.backingWindowVisible
+    onActiveChanged: if (active) Qt.callLater(function() {
+      if (root.open && root.focusTarget) root.focusTarget.forceActiveFocus()
+    })
+  }
 
   // The surface covers only the card. Other applications remain clickable.
   anchors { top: true; left: true }

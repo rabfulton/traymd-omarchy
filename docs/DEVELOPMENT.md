@@ -70,6 +70,10 @@ placement. The card-sized overlay stays open on focus loss and does not
 intercept pointer input outside the card. Its original source and license are from
 [Omarchy](https://github.com/basecamp/omarchy). Packaged shell files are never
 modified.
+The short Exclusive focus prime is followed by OnDemand with a
+`HyprlandFocusGrab`, so follow-mouse cannot move keyboard focus away simply
+because the pointer was elsewhere when the note opened. An outside click clears
+the grab without closing the note.
 
 Global shortcuts use a managed block in `~/.config/hypr/bindings.lua`.
 The settings dialog checks for conflicts, backs up the file, reloads Hyprland

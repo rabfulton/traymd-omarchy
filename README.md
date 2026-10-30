@@ -25,6 +25,9 @@ until dismissed with Escape, Ctrl+W or the bar icon. Type normally: headings,
 emphasis, lists and code render in place. **Ctrl+click** a link to open it in
 your default browser. Ordinary clicks and dragging let you edit and select text.
 
+Opening the popup focuses the note so you can type immediately, wherever the
+mouse is. Clicking another window releases focus and leaves the note visible.
+
 Enter continues a list; Enter on an empty item ends it. The right-click menu
 includes undo, redo, cut, copy, paste and select all.
 
