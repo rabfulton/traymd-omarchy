@@ -15,9 +15,8 @@ omarchy plugin add https://github.com/rabfulton/traymd-omarchy.git --enable
 ```
 
 Choose **left**, **center** or **right** when Omarchy asks where to put the icon.
-Click the notes icon once to finish setup in a terminal. It installs any missing
-build packages, builds the editor and restarts the shell. Your chosen position
-is kept.
+Setup starts automatically in a terminal. It installs any missing build
+packages, builds the editor and restarts the shell. Your chosen position is kept.
 
 ## Usage
 
@@ -32,6 +31,10 @@ includes undo, redo, cut, copy, paste and select all.
 Task lists work too: type `- [ ] To do` or `- [x] Done`, then click the
 checkbox to toggle it. Enter adds an unchecked task; Enter on an empty task
 ends the list. Task lists stay as ordinary Markdown when saved.
+
+Edits save after 1.5 seconds of idle time, and when switching or closing notes.
+Markdown files added to the notes folder appear automatically. External changes
+to saved notes also appear without restarting the app.
 
 ## Shortcuts
 
@@ -90,8 +93,9 @@ change the size or choose between the screen centre and the bar icon.
 omarchy plugin update traymd-omarchy
 ```
 
-Click the notes icon after updating. If the native backend needs rebuilding,
-setup opens automatically; otherwise your notes open immediately.
+If the native backend needs rebuilding, setup starts automatically when the
+shell detects the update; you do not need to click the notes icon to trigger it.
+Omarchy's plugin updater has no build hook, so preparation follows its rescan.
 
 Upgrading from an older build and still seeing the old editor? Rebuild once:
 

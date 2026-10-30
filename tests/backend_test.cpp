@@ -9,6 +9,7 @@
 #include <QFile>
 #include <QSettings>
 #include <QSignalSpy>
+#include <QMetaProperty>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTextBlock>
@@ -23,6 +24,12 @@ class BackendTest : public QObject {
         QFile file(path);
         QVERIFY(file.open(QIODevice::WriteOnly));
         QCOMPARE(file.write(bytes), bytes.size());
+    }
+    static void replaceText(NoteStore &store, const QString &text) {
+        QVERIFY(store.document());
+        QTextCursor cursor(store.document());
+        cursor.select(QTextCursor::Document);
+        cursor.insertText(text);
     }
     static QByteArray read(const QString &path) {
         QFile file(path);
@@ -64,8 +71,8 @@ private slots:
         QCOMPARE(store.text().toUtf8(), original);
         QVERIFY(store.save());
         QCOMPARE(read(path), original);
-        store.setText(store.text() + "\nAnother thought\n");
-        QTRY_VERIFY_WITH_TIMEOUT(!store.dirty(), 1500);
+        replaceText(store, store.text() + "\nAnother thought\n");
+        QTRY_VERIFY_WITH_TIMEOUT(!store.dirty(), 2500);
         QCOMPARE(read(path), original + "\nAnother thought\n");
     }
 
@@ -74,17 +81,103 @@ private slots:
         NoteStore store;
         QVERIFY(store.initialize(dir.path()));
         const auto first = store.currentName();
-        store.setText("Remember this");
+        replaceText(store, "Remember this");
         QVERIFY(store.newNote());
         QVERIFY(store.currentName() != first);
         QCOMPARE(store.count(), 2);
         QCOMPARE(read(dir.filePath(first)), "Remember this");
-        store.setText("Second note");
+        replaceText(store, "Second note");
         QVERIFY(store.navigate(-1));
         QCOMPARE(store.text(), "Remember this");
         QVERIFY(!store.navigate(-1));
         QVERIFY(store.navigate(1));
         QCOMPARE(store.text(), "Second note");
+    }
+
+    void autosaveWaitsForIdleAndFormattingNeverSaves() {
+        QTemporaryDir dir;
+        write(dir.filePath("note.md"), "original");
+        NoteStore store;
+        QVERIFY(store.initialize(dir.path()));
+        store.markdown()->setAccent(QColor("#ff0000"));
+        store.markdown()->setFontSize(20);
+        QVERIFY(!store.dirty());
+        replaceText(store, "first edit");
+        QTest::qWait(650);
+        QCOMPARE(read(dir.filePath("note.md")), "original");
+        replaceText(store, "second edit");
+        QTest::qWait(1000);
+        QCOMPARE(read(dir.filePath("note.md")), "original");
+        QTRY_VERIFY_WITH_TIMEOUT(!store.dirty(), 1200);
+        QCOMPARE(read(dir.filePath("note.md")), "second edit");
+    }
+
+    void documentsAlwaysSaveToTheirOwnFile() {
+        QTemporaryDir dir;
+        NoteStore store;
+        QVERIFY(store.initialize(dir.path()));
+        const auto first = store.currentName();
+        auto *firstDocument = store.document();
+        replaceText(store, "first note");
+        QVERIFY(store.newNote());
+        const auto second = store.currentName();
+        QVERIFY(store.document() != firstDocument);
+        replaceText(store, "second note");
+        QTextCursor cursor(firstDocument);
+        cursor.movePosition(QTextCursor::End);
+        cursor.insertText(" edited");
+        QVERIFY(store.save());
+        QCOMPARE(read(dir.filePath(first)), "first note edited");
+        QCOMPARE(read(dir.filePath(second)), "second note");
+        QVERIFY(!store.metaObject()->property(store.metaObject()->indexOfProperty("text")).isWritable());
+    }
+
+    void externalImportsChangesAndRemovalArePickedUpWithoutWriting() {
+        QTemporaryDir dir;
+        const auto first = dir.filePath("20200101_120000.md");
+        const auto imported = dir.filePath("20300101_120000.md");
+        write(first, "existing note");
+        NoteStore store;
+        QVERIFY(store.initialize(dir.path()));
+        write(imported, "imported note");
+        QTRY_COMPARE_WITH_TIMEOUT(store.count(), 2, 1500);
+        QCOMPARE(store.text(), "existing note");
+        QVERIFY(store.navigate(1));
+        QCOMPARE(store.text(), "imported note");
+        write(imported, "edited externally");
+        QTRY_COMPARE_WITH_TIMEOUT(store.text(), "edited externally", 1500);
+        QVERIFY(!store.dirty());
+        for (const auto &text : {QByteArray("atomic replacement"), QByteArray("second replacement")}) {
+            QSaveFile file(imported);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QCOMPARE(file.write(text), text.size());
+            QVERIFY(file.commit());
+            QTRY_COMPARE_WITH_TIMEOUT(store.text().toUtf8(), text, 1500);
+            QVERIFY(!store.dirty());
+        }
+        QVERIFY(QFile::remove(imported));
+        QTRY_COMPARE_WITH_TIMEOUT(store.count(), 1, 1500);
+        QCOMPARE(store.text(), "existing note");
+        QVERIFY(store.save());
+        QVERIFY(!QFile::exists(imported));
+        QCOMPARE(read(first), "existing note");
+    }
+
+    void actualExternalEditConflictPreservesBothWriters() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("note.md");
+        write(path, "original");
+        NoteStore store;
+        QVERIFY(store.initialize(dir.path()));
+        replaceText(store, "my pending edit");
+        write(path, "external edit");
+        QVERIFY(store.refresh());
+        QCOMPARE(store.text(), "my pending edit");
+        QVERIFY(!store.save());
+        QCOMPARE(read(path), "external edit");
+        QCOMPARE(store.text(), "my pending edit");
+        QVERIFY(store.dirty());
+        QVERIFY(!store.error().isEmpty());
     }
 
     void saveFailureKeepsTextAndBlocksNavigation() {
@@ -94,7 +187,7 @@ private slots:
         QVERIFY(store.initialize(notes));
         QVERIFY(store.newNote());
         const auto current = store.currentName();
-        store.setText("Do not lose this");
+        replaceText(store, "Do not lose this");
         QVERIFY(QDir().rename(notes, dir.filePath("moved")));
         QVERIFY(!store.save());
         QVERIFY(!store.error().isEmpty());
@@ -116,7 +209,8 @@ private slots:
         NoteStore store;
         QVERIFY(!store.initialize(dir.path()));
         QVERIFY(!store.ready());
-        store.setText("replacement");
+        QVERIFY(!store.document());
+        QVERIFY(!store.metaObject()->property(store.metaObject()->indexOfProperty("text")).isWritable());
         QVERIFY(store.save());
         QCOMPARE(read(path), invalid);
     }
@@ -130,7 +224,7 @@ private slots:
             name = store.currentName();
             QVERIFY(store.newNote());
             QVERIFY(store.navigate(-1));
-            store.setText("Still here");
+            replaceText(store, "Still here");
         }
         NoteStore reopened;
         QVERIFY(reopened.initialize(dir.path()));
@@ -282,10 +376,10 @@ private slots:
         NoteStore store;
         QVERIFY(store.initialize(dir.path()));
         const auto first = store.currentName();
-        store.setText("keep me recoverable");
+        replaceText(store, "keep me recoverable");
         QVERIFY(store.newNote());
         const auto second = store.currentName();
-        store.setText("newer note");
+        replaceText(store, "newer note");
         QVERIFY(store.navigate(-1));
         QCOMPARE(store.currentName(), first);
         QVERIFY(store.deleteCurrent());
@@ -303,7 +397,7 @@ private slots:
         QTemporaryDir dir;
         NoteStore store;
         QVERIFY(store.initialize(dir.path()));
-        store.setText("retained");
+        replaceText(store, "retained");
         write(dir.filePath(".trash"), "blocking file");
         const auto name = store.currentName();
         QVERIFY(!store.deleteCurrent());
@@ -321,7 +415,7 @@ private slots:
         QCOMPARE(store.text(), "newer");
         QVERIFY(store.navigate(-1));
         QCOMPARE(store.text(), "older");
-        store.setText("edited older");
+        replaceText(store, "edited older");
         QVERIFY(store.save());
         NoteStore reopened;
         QVERIFY(reopened.initialize(dir.path()));

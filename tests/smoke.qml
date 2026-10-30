@@ -12,6 +12,7 @@ import "UnpreparedPlugin" as Unprepared
 // No visible windows or changes to the running desktop are needed.
 ShellRoot {
     property var openedLinks: []
+    property int setupLaunches: 0
     Window {
         id: window
         visible: true
@@ -52,6 +53,7 @@ ShellRoot {
             visible: false
             bar: testBar
             pluginDirectory: Quickshell.env("TRAYMD_UNPREPARED_PLUGIN_DIR")
+            launchSetup: function() { setupLaunches += 1 }
         }
 
         Loader {
@@ -105,6 +107,7 @@ ShellRoot {
                 if (unprepared.ready || unprepared.implicitWidth <= 0 || unprepared.opened) {
                     console.error("Fresh install did not show a setup icon safely"); Qt.exit(1); return
                 }
+                if (setupLaunches !== 1) { console.error("Missing backend setup must start automatically, without an icon click"); Qt.exit(1); return }
                 bootstrap.active = false
                 if (panel.contentHeight !== 540 || panel.contentWidth !== 540) {
                     console.error("First-run monitor proportions failed", panel.contentWidth, panel.contentHeight)
@@ -132,7 +135,7 @@ ShellRoot {
                 const newer = toolbar.children[1]
                 keyEvents.mouseClick(newer, newer.width / 2, newer.height / 2, Qt.LeftButton, Qt.NoModifier, 0)
                 if (widget.notes.currentName !== newestName) { console.error("Newer button failed"); Qt.exit(1); return }
-                widget.notes.text = ""
+                panel.textEditor.text = ""
                 window.requestActivate()
                 panel.textEditor.forceActiveFocus()
                 for (const ch of "## heading") {
@@ -170,7 +173,7 @@ ShellRoot {
                     Qt.exit(1)
                     return
                 }
-                widget.notes.text = "- first"
+                panel.textEditor.text = "- first"
                 editor.cursorPosition = editor.length
                 keyEvents.keyClick(Qt.Key_Return, Qt.NoModifier, 0)
                 if (editor.text !== "- first\n- ") {
@@ -239,7 +242,7 @@ ShellRoot {
                     console.error("Editor menu must render inside the app"); Qt.exit(1); return
                 }
                 panel.editMenu.close()
-                widget.notes.text = "- [ ] Pack a notebook"
+                panel.textEditor.text = "- [ ] Pack a notebook"
                 panel.textEditor.cursorPosition = panel.textEditor.length
                 phase = 4
                 return
@@ -265,7 +268,7 @@ ShellRoot {
                 keyEvents.keyClick(Qt.Key_Return, Qt.NoModifier, 0)
                 if (widget.notes.text !== "- [x] Pack a notebook\n") { console.error("Empty task exit failed"); Qt.exit(1); return }
                 if (!widget.notes.save()) { console.error("Saving tasks failed"); Qt.exit(1); return }
-                widget.notes.text = "Reload must preserve this note."
+                panel.textEditor.text = "Reload must preserve this note."
                 widget.notes.save()
                 reloadProbe.active = true
                 phase = 5
@@ -288,9 +291,8 @@ ShellRoot {
                 return
             }
             if (phase === 7) {
-                reloadProbe.item.textEditor.clear()
                 if (widget.notes.text !== "Reload must preserve this note.") {
-                    console.error("Programmatic editor reset overwrote note contents"); Qt.exit(1); return
+                    console.error("Recreated editor overwrote note contents"); Qt.exit(1); return
                 }
                 reloadProbe.active = false
                 const original = widget.notes.text
@@ -305,7 +307,7 @@ ShellRoot {
                 if (widget.notes.text !== original.slice(6)) { console.error("Menu cut did not update the model"); Qt.exit(1); return }
                 panel.editMenu.itemAt(5).triggered() // Paste
                 if (widget.notes.text !== original) { console.error("Menu paste did not update the model"); Qt.exit(1); return }
-                widget.notes.text = "Before [Example link](https://example.com/path) after\nhttps://example.org/plain\nwww.example.net\n`https://example.com/code`\n```\nhttps://example.com/fenced\n```"
+                panel.textEditor.text = "Before [Example link](https://example.com/path) after\nhttps://example.org/plain\nwww.example.net\n`https://example.com/code`\n```\nhttps://example.com/fenced\n```"
                 panel.textEditor.cursorPosition = 0
                 phase = 8
                 return
@@ -358,7 +360,7 @@ ShellRoot {
             const source = docsPreview
                 ? "# A few things to remember\n## This week\n\nMake room for **small ideas** and *good coffee*.\n\n- [x] Book the train for Friday\n- [ ] Pick up a notebook on the way home\n\n### Keep this handy\n```python\ndef slow_morning():\n    return \"coffee, then everything else\"\n```\n\n[Explore the Omarchy manual](https://learn.omarchy.org)\n\n*Alt+← / Alt+→ to browse notes*"
                 : "# Heading\n## Subheading\n### Smaller heading\n\n**Bold**, *italic* and ***both***.\n\n- One quick thought\n- Another thing to remember\n\n```python\ndef remember():\n    return \"A quick note\"\n```\n\n[Example link](https://example.com)"
-            widget.notes.text = source
+            panel.textEditor.text = source
             if (panel.textEditor.text !== source) {
                 console.error("Editor did not load the note")
                 Qt.exit(1)
@@ -389,7 +391,7 @@ ShellRoot {
                 panel.textEditor.deselect()
                 panel.textEditor.focus = false
                 panel.textEditor.cursorVisible = false
-                widget.notes.text = source
+                panel.textEditor.text = source
                 widget.notes.save()
             }
             console.log("TRAYMD_SMOKE_OK", widget.notes.currentName)

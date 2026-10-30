@@ -4,7 +4,6 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
-#include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QStringDecoder>
@@ -13,9 +12,11 @@
 #include <algorithm>
 
 NoteStore::NoteStore(QObject *parent) : QObject(parent) {
-    m_autosave.setSingleShot(true);
-    m_autosave.setInterval(400);
-    connect(&m_autosave, &QTimer::timeout, this, &NoteStore::save);
+    m_rescan.setSingleShot(true);
+    m_rescan.setInterval(100);
+    connect(&m_rescan, &QTimer::timeout, this, &NoteStore::refresh);
+    connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, [this] { m_rescan.start(); });
+    connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, [this] { m_rescan.start(); });
     connect(qApp, &QCoreApplication::aboutToQuit, this, &NoteStore::save);
 }
 
@@ -39,7 +40,7 @@ void NoteStore::clearError() {
 
 bool NoteStore::initialize(const QString &directory) {
     // The store is shared across monitors. Configuration applies on load.
-    if (!m_directory.isEmpty()) return ready() || (count() > 0 ? load(0) : newNote());
+    if (!m_directory.isEmpty()) return refresh();
     QString path = directory;
     if (path.startsWith("~/")) path.replace(0, 1, QDir::homePath());
     if (path.isEmpty())
@@ -49,7 +50,27 @@ bool NoteStore::initialize(const QString &directory) {
     if (!QDir::isAbsolutePath(path)) return fail("Notes directory must be an absolute path.");
     if (!QDir().mkpath(path)) return fail("Cannot create notes directory: " + path);
     m_directory = path;
-    auto entries = QDir(path).entryInfoList({"*.md"}, QDir::Files, QDir::Name);
+    return refresh();
+}
+
+void NoteStore::watchFiles() {
+    const auto old = m_watcher.files() + m_watcher.directories();
+    if (!old.isEmpty()) m_watcher.removePaths(old);
+    if (!QFile::exists(m_directory)) return;
+    m_watcher.addPath(m_directory);
+    m_watcher.addPath(QFileInfo(m_directory).absolutePath());
+    for (const auto &name : m_names) {
+        const auto path = QDir(m_directory).filePath(name);
+        if (QFile::exists(path)) m_watcher.addPath(path);
+    }
+}
+
+bool NoteStore::refresh() {
+    if (m_directory.isEmpty()) return false;
+    if (!QDir(m_directory).exists()) return fail("The notes directory is unavailable.");
+    const auto selected = currentName();
+    const int previousIndex = m_index;
+    auto entries = QDir(m_directory).entryInfoList({"*.md"}, QDir::Files, QDir::Name);
     auto created = [](const QFileInfo &file) {
         const auto match = QRegularExpression("^(\\d{8}_\\d{6})(?:_(\\d{3}))?").match(file.fileName());
         if (match.hasMatch()) {
@@ -59,8 +80,22 @@ bool NoteStore::initialize(const QString &directory) {
         return file.birthTime().isValid() ? file.birthTime() : file.lastModified();
     };
     std::stable_sort(entries.begin(), entries.end(), [&](const auto &a, const auto &b) { return created(a) < created(b); });
-    for (const auto &entry : entries) m_names.append(entry.fileName());
-    if (m_names.isEmpty()) return newNote();
+    QStringList names;
+    for (const auto &entry : entries) names.append(entry.fileName());
+    if (m_current && !names.contains(selected) && dirty()) {
+        watchFiles();
+        return fail("This note was removed outside the app. Its pending edits remain open.");
+    }
+    const bool changed = m_names != names;
+    m_names = names;
+    watchFiles();
+    if (m_names.isEmpty()) { m_current = nullptr; m_index = -1; return newNote(); }
+    if (!selected.isEmpty() && m_names.contains(selected)) {
+        m_index = m_names.indexOf(selected);
+        if (changed) emit currentChanged();
+        return m_current->reload();
+    }
+    if (m_current) return load(qBound(0, previousIndex, count() - 1));
     QSettings state(QSettings::IniFormat, QSettings::UserScope, "traymd-omarchy", "notes");
     const int last = m_names.indexOf(state.value(m_directory).toString());
     return load(last >= 0 ? last : count() - 1);
@@ -68,17 +103,28 @@ bool NoteStore::initialize(const QString &directory) {
 
 bool NoteStore::load(int index) {
     if (index < 0 || index >= count()) return false;
-    QFile file(QDir(m_directory).filePath(m_names.at(index)));
-    if (!file.open(QIODevice::ReadOnly))
-        return fail("Cannot read note: " + file.errorString());
-    const auto bytes = file.readAll();
-    if (file.error() != QFile::NoError) return fail("Cannot read note: " + file.errorString());
-    QStringDecoder decoder(QStringDecoder::Utf8);
-    const QString content = decoder(bytes);
-    if (decoder.hasError()) return fail("This note is not valid UTF-8; it has been left untouched.");
+    const QString name = m_names.at(index);
+    if (auto *existing = m_documents.value(name)) {
+        if (!existing->reload()) return false;
+        m_current = existing;
+    } else {
+        const QString path = QDir(m_directory).filePath(name);
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly))
+            return fail("Cannot read note: " + file.errorString());
+        const auto bytes = file.readAll();
+        if (file.error() != QFile::NoError) return fail("Cannot read note: " + file.errorString());
+        QStringDecoder decoder(QStringDecoder::Utf8);
+        const QString content = decoder(bytes);
+        if (decoder.hasError()) return fail("This note is not valid UTF-8; it has been left untouched.");
+        auto *note = new NoteDocument(path, bytes, content, this);
+        m_documents.insert(name, note);
+        connect(note, &NoteDocument::textChanged, this, [this, note] { if (note == m_current) emit textChanged(); });
+        connect(note, &NoteDocument::dirtyChanged, this, [this, note] { if (note == m_current) emit dirtyChanged(); });
+        connect(note, &NoteDocument::errorChanged, this, [this, note] { if (note == m_current) emit errorChanged(); });
+        m_current = note;
+    }
     m_index = index;
-    m_text = content;
-    m_dirty = false;
     clearError();
     QSettings state(QSettings::IniFormat, QSettings::UserScope, "traymd-omarchy", "notes");
     state.setValue(m_directory, currentName());
@@ -88,27 +134,14 @@ bool NoteStore::load(int index) {
     return true;
 }
 
-void NoteStore::setText(const QString &text) {
-    if (!ready() || text == m_text) return;
-    m_text = text;
-    m_dirty = true;
-    emit textChanged();
-    emit dirtyChanged();
-    m_autosave.start();
+void NoteStore::attachEditor(QQuickTextDocument *editor) {
+    if (editor && document()) editor->setTextDocument(document());
 }
 
 bool NoteStore::save() {
-    m_autosave.stop();
-    if (!m_dirty) return true;
-    QSaveFile file(QDir(m_directory).filePath(currentName()));
-    if (!file.open(QIODevice::WriteOnly)) return fail("Could not save: " + file.errorString());
-    const auto bytes = m_text.toUtf8();
-    if (file.write(bytes) != bytes.size() || !file.commit())
-        return fail("Could not save: " + file.errorString());
-    m_dirty = false;
-    clearError();
-    emit dirtyChanged();
-    return true;
+    bool success = true;
+    for (auto *note : m_documents) if (!note->save()) success = false;
+    return success;
 }
 
 bool NoteStore::newNote() {
@@ -120,6 +153,7 @@ bool NoteStore::newNote() {
         return fail("Cannot create note: " + file.errorString());
     file.close();
     m_names.append(name);
+    watchFiles();
     return load(count() - 1);
 }
 
@@ -140,8 +174,7 @@ bool NoteStore::deleteCurrent() {
     const int next = qMin(m_index, count() - 2);
     m_names.removeAt(m_index);
     m_index = -1;
-    m_text.clear();
-    emit currentChanged();
-    emit textChanged();
+    m_current = nullptr;
+    watchFiles();
     return count() ? load(next) : newNote();
 }

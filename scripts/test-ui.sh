@@ -27,12 +27,13 @@ cp "$project_dir/BarWidget.qml" "$preview_dir/UnpreparedPlugin/BarWidget.qml"
 printf '%s\n' 'raise SystemExit(1)' > "$preview_dir/UnpreparedPlugin/scripts/backend-status.py"
 cp "$project_dir/tests/smoke.qml" "$preview_dir/shell.qml"
 cp "$project_dir/tests/reopen.qml" "$preview_dir/reopen.qml"
+cp "$project_dir/tests/lifecycle.qml" "$preview_dir/lifecycle.qml"
 status=0
 run_ui() {
 env -u WAYLAND_DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= QT_SCALE_FACTOR=1 \
     QT_QUICK_CONTROLS_STYLE=Basic \
     XDG_RUNTIME_DIR="$test_dir/runtime" XDG_CONFIG_HOME="$test_dir/config" \
-    TRAYMD_TEST_NOTES="$test_dir/notes" \
+    TRAYMD_TEST_NOTES="${2:-$test_dir/notes}" \
     TRAYMD_TEST_PLUGIN_DIR="$preview_dir/Plugin" \
     TRAYMD_UNPREPARED_PLUGIN_DIR="$preview_dir/UnpreparedPlugin" \
     TRAYMD_DOCS_PREVIEW="${TRAYMD_DOCS_PREVIEW:-0}" \
@@ -51,6 +52,10 @@ snapshot = {str(note): [hashlib.sha256(note.read_bytes()).hexdigest(), note.stat
 (root / "note-snapshot.json").write_text(json.dumps(snapshot))
 PY
 run_ui "$preview_dir/reopen.qml" >> "$build_dir/ui-test.log" 2>&1 || status=$?
+if (( status == 0 )); then
+    cp -a "$test_dir/notes" "$test_dir/lifecycle-notes"
+    run_ui "$preview_dir/lifecycle.qml" "$test_dir/lifecycle-notes" >> "$build_dir/ui-test.log" 2>&1 || status=$?
+fi
 cat "$build_dir/ui-test.log"
 (( status == 0 )) || exit "$status"
 python3 - "$test_dir/note-snapshot.json" <<'PY'
@@ -67,6 +72,7 @@ print("Saved notes survive editor reload, process shutdown and process restart u
 PY
 grep -q TRAYMD_SMOKE_OK "$build_dir/ui-test.log"
 grep -q TRAYMD_REOPEN_OK "$build_dir/ui-test.log"
+grep -q TRAYMD_LIFECYCLE_OK "$build_dir/ui-test.log"
 if grep -Eq 'ReferenceError|TypeError|Binding loop|Unable to assign|Failed to load configuration|ERROR:.*caused by' "$build_dir/ui-test.log"; then
     exit 1
 fi

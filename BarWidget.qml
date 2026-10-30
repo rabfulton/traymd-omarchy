@@ -12,6 +12,9 @@ Ui.BarWidget {
     property bool pendingOpen: false
     property bool pendingNewNote: false
     property bool setupLaunching: false
+    property var launchSetup: function() {
+        Quickshell.execDetached(["omarchy-launch-terminal", "bash", pluginDirectory + "/scripts/first-run.sh"])
+    }
     readonly property bool ready: editorLoader.status === Loader.Ready
     readonly property bool opened: ready && editorLoader.item.opened
     implicitWidth: ready ? editorLoader.item.implicitWidth : setupButton.implicitWidth
@@ -40,7 +43,7 @@ Ui.BarWidget {
         if (setupLaunching) return
         setupLaunching = true
         launchCooldown.restart()
-        Quickshell.execDetached(["omarchy-launch-terminal", "bash", pluginDirectory + "/scripts/first-run.sh"])
+        launchSetup()
     }
     function injectEditor() {
         if (!editorLoader.item) return
@@ -69,10 +72,8 @@ Ui.BarWidget {
                 }
             } else {
                 editorLoader.active = false
-                if (root.pendingOpen) {
-                    root.pendingOpen = false
-                    root.finishSetup()
-                }
+                root.pendingOpen = false
+                root.finishSetup()
             }
         }
     }

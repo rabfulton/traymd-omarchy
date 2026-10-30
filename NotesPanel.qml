@@ -15,7 +15,8 @@ NotesPopup {
     property var openExternalUrl: function(url) { return Qt.openUrlExternally(url) }
     signal settingsEdited(var values)
     readonly property alias textEditor: editor
-    readonly property alias markdown: renderer
+    readonly property var renderer: Backend.Notes.markdown
+    readonly property var markdown: renderer
     readonly property alias editMenu: editorMenu
     readonly property alias noteToolbar: tools
     readonly property alias decorationItems: decorationRepeater
@@ -27,6 +28,17 @@ NotesPopup {
         Commons.Color.popups.background.g * 0.94 + foreground.g * 0.06,
         Commons.Color.popups.background.b * 0.94 + foreground.b * 0.06, 1)
     readonly property real initialHeight: Math.round((screenH > 0 ? screenH : 1080) * 0.5)
+    readonly property var renderingStyle: ({
+        accent: Commons.Color.accent,
+        headingColors: [Backend.Theme.colors.blue || Backend.Theme.colors.color4 || Commons.Color.accent,
+            Backend.Theme.colors.magenta || Backend.Theme.colors.color5 || Commons.Color.accent,
+            Backend.Theme.colors.yellow || Backend.Theme.colors.color3 || Commons.Color.accent],
+        muted: root.secondary,
+        codeBackground: root.codeFill,
+        fontSize: root.editorFontSize
+    })
+    onRenderingStyleChanged: updateRendering()
+    onRendererChanged: updateRendering()
     contentHeight: cappedContentHeight(Math.max(300, preferredHeight || initialHeight))
     contentWidth: fittedContentWidth(Math.max(280, preferredWidth || contentHeight))
     focusTarget: editor
@@ -35,6 +47,11 @@ NotesPopup {
     onDeletePendingChanged: if (deletePending) { deleteDialog.selectedIndex = 0; focusEditor() }
 
     function focusEditor() { editor.forceActiveFocus() }
+
+    function updateRendering() {
+        if (!renderer) return
+        for (const key in renderingStyle) renderer[key] = renderingStyle[key]
+    }
 
     function navigate(delta) {
         Backend.Notes.navigate(delta)
@@ -49,7 +66,7 @@ NotesPopup {
 
     function toggleTask(position) {
         focusEditor()
-        if (renderer.toggleTask(position)) editor.commitUserEdit()
+        renderer.toggleTask(position)
     }
 
     function shortcutLabel(label, action) {
@@ -196,7 +213,6 @@ NotesPopup {
                 ContextMenu.menu: EditorMenu {
                     id: editorMenu
                     editor: editor
-                    onEdited: editor.commitUserEdit()
                 }
                 Accessible.name: "Note"
                 Keys.priority: Keys.BeforeItem
@@ -207,7 +223,6 @@ NotesPopup {
                     if (event.modifiers === Qt.NoModifier) {
                         const pos = renderer.editKey(cursorPosition, selectionStart, selectionEnd, event.key)
                         if (pos >= 0) {
-                            editor.commitUserEdit()
                             cursorPosition = pos
                             event.accepted = true
                         } else if (selectionStart === selectionEnd && (event.key === Qt.Key_Left || event.key === Qt.Key_Right)) {
@@ -222,18 +237,10 @@ NotesPopup {
                     }
                 }
 
-                function syncText() {
-                    if (text !== Backend.Notes.text) text = Backend.Notes.text
-                }
-                function commitUserEdit() {
-                    if (Backend.Notes.ready) Backend.Notes.text = text
-                }
-                Component.onCompleted: syncText()
-                // Buffer initialization/replacement is not a user edit. A
-                // newly created view must never write its initial empty text
-                // into the shared note store before loading that note.
-                onTextEdited: commitUserEdit()
+                Component.onCompleted: Backend.Notes.attachEditor(textDocument)
                 onCursorPositionChanged: {
+                    if (!renderer) return
+                    if (activeFocus) renderer.cursorPosition = cursorPosition
                     if (selectionStart !== selectionEnd) return
                     const position = renderer.taskContentPosition(cursorPosition)
                     if (position !== cursorPosition) cursorPosition = position
@@ -241,24 +248,10 @@ NotesPopup {
 
                 Connections {
                     target: Backend.Notes
-                    function onTextChanged() { editor.syncText() }
                     function onCurrentChanged() {
-                        editor.syncText()
+                        Backend.Notes.attachEditor(editor.textDocument)
                         editor.cursorPosition = editor.length
                     }
-                }
-
-                Backend.MarkdownHighlighter {
-                    id: renderer
-                    textDocument: editor.textDocument
-                    cursorPosition: editor.cursorPosition
-                    accent: Commons.Color.accent
-                    headingColors: [Backend.Theme.colors.blue || Backend.Theme.colors.color4 || Commons.Color.accent,
-                        Backend.Theme.colors.magenta || Backend.Theme.colors.color5 || Commons.Color.accent,
-                        Backend.Theme.colors.yellow || Backend.Theme.colors.color3 || Commons.Color.accent]
-                    muted: root.secondary
-                    codeBackground: root.codeFill
-                    fontSize: root.editorFontSize
                 }
 
                 TapHandler {
@@ -278,16 +271,16 @@ NotesPopup {
 
                 Repeater {
                     id: decorationRepeater
-                    model: renderer.decorations
+                    model: renderer ? renderer.decorations : []
                     delegate: Item {
                         required property var modelData
                         readonly property rect location: {
                             editor.contentHeight; editor.width; editor.text
-                            return editor.positionToRectangle(modelData.position)
+                            return editor.positionToRectangle(Math.min(editor.length, modelData.position))
                         }
                         readonly property rect endLocation: {
                             editor.contentHeight; editor.width; editor.text
-                            return editor.positionToRectangle(modelData.endPosition === undefined ? modelData.position : modelData.endPosition)
+                            return editor.positionToRectangle(Math.min(editor.length, modelData.endPosition === undefined ? modelData.position : modelData.endPosition))
                         }
                         z: modelData.kind === "code" ? -1 : 1
                         x: modelData.kind === "code" ? 0 : location.x

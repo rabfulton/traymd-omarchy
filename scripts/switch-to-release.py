@@ -57,7 +57,7 @@ def main():
             run("omarchy", "bar", "set", PLUGIN, key, json.dumps(value), "--json")
     print("Release checkout installed. Notes and app configuration were kept.")
     if not legacy:
-        print("Click the notes icon to finish setup if prompted.")
+        print("Editor setup starts automatically when the plugin loads.")
 
 
 if __name__ == "__main__":
