@@ -24,7 +24,7 @@ is kept.
 Click the notes icon to open or close the popup. It stays above normal windows
 until dismissed with Escape, Ctrl+W or the bar icon. Type normally: headings,
 emphasis, lists and code render in place. **Ctrl+click** a link to open it in
-your default browser.
+your default browser. Ordinary clicks and dragging let you edit and select text.
 
 Enter continues a list; Enter on an empty item ends it. The right-click menu
 includes undo, redo, cut, copy, paste and select all.
@@ -79,8 +79,8 @@ app config and notes. A custom notes folder can be set in Omarchy's bar settings
 
 ## Appearance
 
-On first use, the popup takes half the monitor height, with width = height ÷
-1.25, adjusted to fit small screens.
+On first use, the popup is square, with each side half the monitor height,
+adjusted to fit small screens.
 Fonts follow Omarchy's theme and display scaling. Use the gear button to
 change the size or choose between the screen centre and the bar icon.
 

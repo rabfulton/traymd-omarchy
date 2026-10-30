@@ -11,6 +11,7 @@ import "UnpreparedPlugin" as Unprepared
 // Run from build/preview with the installed shell's Commons and Ui modules.
 // No visible windows or changes to the running desktop are needed.
 ShellRoot {
+    property var openedLinks: []
     Window {
         id: window
         visible: true
@@ -77,6 +78,7 @@ ShellRoot {
             preferredHeight: Number(widget.settings.height || 0)
             placement: String(widget.settings.placement || "anchor")
             editorFontSize: 16
+            openExternalUrl: function(url) { openedLinks.push(url); return true }
             onSettingsEdited: function(values) { widget.updateSettings(values) }
         }
     }
@@ -104,12 +106,12 @@ ShellRoot {
                     console.error("Fresh install did not show a setup icon safely"); Qt.exit(1); return
                 }
                 bootstrap.active = false
-                if (panel.contentHeight !== 540 || panel.contentWidth !== 432) {
+                if (panel.contentHeight !== 540 || panel.contentWidth !== 540) {
                     console.error("First-run monitor proportions failed", panel.contentWidth, panel.contentHeight)
                     Qt.exit(1); return
                 }
                 panel.screenH = 1440
-                if (panel.contentHeight !== 720 || panel.contentWidth !== 576) {
+                if (panel.contentHeight !== 720 || panel.contentWidth !== 720) {
                     console.error("Monitor resize proportions failed"); Qt.exit(1); return
                 }
                 panel.screenH = 1080
@@ -303,6 +305,46 @@ ShellRoot {
                 if (widget.notes.text !== original.slice(6)) { console.error("Menu cut did not update the model"); Qt.exit(1); return }
                 panel.editMenu.itemAt(5).triggered() // Paste
                 if (widget.notes.text !== original) { console.error("Menu paste did not update the model"); Qt.exit(1); return }
+                widget.notes.text = "Before [Example link](https://example.com/path) after\nhttps://example.org/plain\nwww.example.net\n`https://example.com/code`\n```\nhttps://example.com/fenced\n```"
+                panel.textEditor.cursorPosition = 0
+                phase = 8
+                return
+            }
+            if (phase === 8) {
+                const editor = panel.textEditor
+                const source = widget.notes.text
+                function clickAt(text, modifiers) {
+                    const rect = editor.positionToRectangle(source.indexOf(text) + 2)
+                    keyEvents.mouseClick(editor, rect.x + 2, rect.y + rect.height / 2, Qt.LeftButton, modifiers, 0)
+                }
+                clickAt("Example link", Qt.ControlModifier)
+                if (openedLinks.length !== 1 || openedLinks[0] !== "https://example.com/path") {
+                    console.error("Ctrl+click did not open the Markdown link", JSON.stringify(openedLinks)); Qt.exit(1); return
+                }
+                clickAt("Example link", Qt.NoModifier)
+                if (openedLinks.length !== 1 || editor.cursorPosition < source.indexOf("Example link") || editor.cursorPosition >= source.indexOf("Example link") + "Example link".length) {
+                    console.error("Ordinary clicks must place the cursor for editing without opening links"); Qt.exit(1); return
+                }
+                clickAt("https://example.org/plain", Qt.NoModifier)
+                clickAt("www.example.net", Qt.NoModifier)
+                if (openedLinks.length !== 1) { console.error("Ordinary URL clicks opened a browser"); Qt.exit(1); return }
+                clickAt("https://example.org/plain", Qt.ControlModifier)
+                clickAt("www.example.net", Qt.ControlModifier)
+                if (openedLinks.length !== 3 || openedLinks[1] !== "https://example.org/plain" || openedLinks[2] !== "https://www.example.net") {
+                    console.error("Ctrl+click on plain URLs did not open their targets", JSON.stringify(openedLinks)); Qt.exit(1); return
+                }
+                clickAt("Before", Qt.ControlModifier)
+                clickAt("https://example.com/code", Qt.ControlModifier)
+                clickAt("https://example.com/fenced", Qt.ControlModifier)
+                if (openedLinks.length !== 3) { console.error("Non-link text opened a URL"); Qt.exit(1); return }
+                const start = editor.positionToRectangle(source.indexOf("Example link") + 1)
+                const end = editor.positionToRectangle(source.indexOf("Example link") + 10)
+                keyEvents.mousePress(editor, start.x, start.y + start.height / 2, Qt.LeftButton, Qt.NoModifier, 0)
+                keyEvents.mouseMove(editor, end.x, end.y + end.height / 2, 0, Qt.LeftButton, Qt.NoModifier)
+                keyEvents.mouseRelease(editor, end.x, end.y + end.height / 2, Qt.LeftButton, Qt.NoModifier, 0)
+                if (openedLinks.length !== 3 || editor.selectedText === "" || widget.notes.text !== source) {
+                    console.error("Dragging a link must select text without opening or editing it"); Qt.exit(1); return
+                }
             }
             running = false
             const docsPreview = Quickshell.env("TRAYMD_DOCS_PREVIEW") === "1"

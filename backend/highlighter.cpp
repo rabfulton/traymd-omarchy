@@ -214,6 +214,7 @@ int MarkdownHighlighter::editKey(int position, int start, int end, int key) {
 QString MarkdownHighlighter::linkAt(int position) const {
     if (!document()) return {};
     const auto block = document()->findBlock(position);
+    if (!block.isValid() || !block.layout()) return {};
     const int offset = position - block.position();
     for (const auto &range : block.layout()->formats()) {
         if (offset >= range.start && offset < range.start + range.length && range.format.isAnchor())

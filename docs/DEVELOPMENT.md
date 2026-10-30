@@ -61,6 +61,8 @@ still need a live desktop check.
 The UI suite also replaces editor instances, checks deliberate deletion and
 menu edits, and reopens notes in a fresh process. Saved bytes and modification
 times must remain unchanged when merely reopening or closing the app.
+Link click tests replace the external URL opener with a callback, checking
+targets and text selection without launching a browser.
 
 After building, regenerate the README image with:
 

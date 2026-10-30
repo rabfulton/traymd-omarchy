@@ -210,6 +210,9 @@ private slots:
         QVERIFY(both.fontItalic());
         QCOMPARE(both.fontWeight(), int(QFont::Bold));
         QCOMPARE(renderer.linkAt(source.indexOf("label")), "https://example.com");
+        QVERIFY(renderer.linkAt(-1).isEmpty());
+        QVERIFY(renderer.linkAt(document.characterCount()).isEmpty());
+        QVERIFY(renderer.linkAt(source.indexOf("code")).isEmpty());
         QCOMPARE(renderer.moveCursor(1, 1), 2);
         QCOMPARE(renderer.moveCursor(7, -1), 6);
     }

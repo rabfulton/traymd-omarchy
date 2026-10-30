@@ -12,6 +12,7 @@ NotesPopup {
     property int editorFontSize: Style.font.heading
     property bool settingsOpen: false
     property bool deletePending: false
+    property var openExternalUrl: function(url) { return Qt.openUrlExternally(url) }
     signal settingsEdited(var values)
     readonly property alias textEditor: editor
     readonly property alias markdown: renderer
@@ -27,7 +28,7 @@ NotesPopup {
         Commons.Color.popups.background.b * 0.94 + foreground.b * 0.06, 1)
     readonly property real initialHeight: Math.round((screenH > 0 ? screenH : 1080) * 0.5)
     contentHeight: cappedContentHeight(Math.max(300, preferredHeight || initialHeight))
-    contentWidth: fittedContentWidth(Math.max(280, preferredWidth || Math.round(contentHeight / 1.25)))
+    contentWidth: fittedContentWidth(Math.max(280, preferredWidth || contentHeight))
     focusTarget: editor
     onOpenChanged: if (!open) { deletePending = false; settingsOpen = false }
     onSettingsOpenChanged: if (settingsOpen) Qt.callLater(function() { if (root.settingsOpen) settingsCard.focusFirst() })
@@ -263,11 +264,14 @@ NotesPopup {
                 TapHandler {
                     acceptedButtons: Qt.LeftButton
                     acceptedModifiers: Qt.ControlModifier
+                    // Passive taps coexist with the editor; dragging still
+                    // selects text and cancels activation.
+                    gesturePolicy: TapHandler.DragThreshold
                     onTapped: function(eventPoint) {
                         let url = renderer.linkAt(editor.positionAt(eventPoint.position.x, eventPoint.position.y))
                         if (url !== "") {
                             if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = "https://" + url
-                            Qt.openUrlExternally(url)
+                            root.openExternalUrl(url)
                         }
                     }
                 }
