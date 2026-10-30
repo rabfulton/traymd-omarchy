@@ -53,6 +53,20 @@ ShellRoot {
             pluginDirectory: Quickshell.env("TRAYMD_UNPREPARED_PLUGIN_DIR")
         }
 
+        Loader {
+            id: reloadProbe
+            active: false
+            visible: false
+            sourceComponent: Component {
+                Plugin.NotesPanel {
+                    anchorItem: widget
+                    bar: testBar
+                    owner: widget
+                    open: false
+                }
+            }
+        }
+
         Plugin.NotesPanel {
             id: panel
             anchorItem: widget
@@ -175,7 +189,7 @@ ShellRoot {
                     console.error("Ctrl+N did not create the newest note")
                     Qt.exit(1); return
                 }
-                editor.insert(0, "delete this test note")
+                for (const ch of "delete this test note") keyEvents.keyClickChar(ch, Qt.NoModifier, 0)
                 keyEvents.keyClick(Qt.Key_Left, Qt.AltModifier, 0)
                 if (widget.notes.currentName !== oldName) { console.error("Older direction failed"); Qt.exit(1); return }
                 keyEvents.keyClick(Qt.Key_Right, Qt.AltModifier, 0)
@@ -241,7 +255,7 @@ ShellRoot {
                 }
                 keyEvents.keyClick(Qt.Key_Z, Qt.ControlModifier, 0)
                 if (widget.notes.text !== "- [ ] Pack a notebook") { console.error("Task toggle undo failed"); Qt.exit(1); return }
-                panel.textEditor.redo()
+                keyEvents.keyClick(Qt.Key_Z, Qt.ControlModifier | Qt.ShiftModifier, 0)
                 if (widget.notes.text !== "- [x] Pack a notebook") { console.error("Task toggle redo failed"); Qt.exit(1); return }
                 panel.textEditor.cursorPosition = panel.textEditor.length
                 keyEvents.keyClick(Qt.Key_Return, Qt.NoModifier, 0)
@@ -249,6 +263,46 @@ ShellRoot {
                 keyEvents.keyClick(Qt.Key_Return, Qt.NoModifier, 0)
                 if (widget.notes.text !== "- [x] Pack a notebook\n") { console.error("Empty task exit failed"); Qt.exit(1); return }
                 if (!widget.notes.save()) { console.error("Saving tasks failed"); Qt.exit(1); return }
+                widget.notes.text = "Reload must preserve this note."
+                widget.notes.save()
+                reloadProbe.active = true
+                phase = 5
+                return
+            }
+            if (phase === 5) {
+                if (!reloadProbe.item || widget.notes.text !== "Reload must preserve this note.") {
+                    console.error("Creating an editor overwrote saved note contents"); Qt.exit(1); return
+                }
+                reloadProbe.active = false
+                phase = 6
+                return
+            }
+            if (phase === 6) {
+                if (widget.notes.text !== "Reload must preserve this note.") {
+                    console.error("Unloading an editor overwrote saved note contents"); Qt.exit(1); return
+                }
+                reloadProbe.active = true
+                phase = 7
+                return
+            }
+            if (phase === 7) {
+                reloadProbe.item.textEditor.clear()
+                if (widget.notes.text !== "Reload must preserve this note.") {
+                    console.error("Programmatic editor reset overwrote note contents"); Qt.exit(1); return
+                }
+                reloadProbe.active = false
+                const original = widget.notes.text
+                panel.textEditor.forceActiveFocus()
+                keyEvents.keyClick(Qt.Key_A, Qt.ControlModifier, 0)
+                keyEvents.keyClick(Qt.Key_Delete, Qt.NoModifier, 0)
+                if (widget.notes.text !== "") { console.error("User deletion was not saved to the model"); Qt.exit(1); return }
+                keyEvents.keyClick(Qt.Key_Z, Qt.ControlModifier, 0)
+                if (widget.notes.text !== original) { console.error("Undo of user deletion failed"); Qt.exit(1); return }
+                panel.textEditor.select(0, 6)
+                panel.editMenu.itemAt(3).triggered() // Cut
+                if (widget.notes.text !== original.slice(6)) { console.error("Menu cut did not update the model"); Qt.exit(1); return }
+                panel.editMenu.itemAt(5).triggered() // Paste
+                if (widget.notes.text !== original) { console.error("Menu paste did not update the model"); Qt.exit(1); return }
             }
             running = false
             const docsPreview = Quickshell.env("TRAYMD_DOCS_PREVIEW") === "1"
@@ -268,7 +322,11 @@ ShellRoot {
                 Qt.exit(1)
                 return
             }
-            panel.textEditor.insert(panel.textEditor.length, "\n\nSaved automatically.")
+            panel.textEditor.cursorPosition = panel.textEditor.length
+            panel.textEditor.forceActiveFocus()
+            keyEvents.keyClick(Qt.Key_Return, Qt.NoModifier, 0)
+            keyEvents.keyClick(Qt.Key_Return, Qt.NoModifier, 0)
+            for (const ch of "Saved automatically.") keyEvents.keyClickChar(ch, Qt.NoModifier, 0)
             if (!panel.textEditor.canUndo || widget.notes.text !== panel.textEditor.text) {
                 console.error("Editor/store binding or undo failed")
                 Qt.exit(1)
@@ -289,7 +347,7 @@ ShellRoot {
                 panel.textEditor.deselect()
                 panel.textEditor.focus = false
                 panel.textEditor.cursorVisible = false
-                panel.textEditor.remove(source.length, panel.textEditor.length)
+                widget.notes.text = source
                 widget.notes.save()
             }
             console.log("TRAYMD_SMOKE_OK", widget.notes.currentName)

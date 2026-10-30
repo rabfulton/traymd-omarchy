@@ -36,6 +36,11 @@ round trip. Fenced code backgrounds are drawn by QML, and code fonts use the
 system monospace family. `backend/code_highlight.c` and its header come from
 XFCE TrayMD and provide the C/Java/Python lexer.
 
+Only TextArea's `textEdited` signal and explicit user editing commands update
+the note store. Never save from `textChanged`: creating a replacement editor
+can emit it with an initial empty buffer and overwrite the loaded note.
+Programmatic buffer loading/resetting and component destruction must not save.
+
 `NotesPopup.qml` adapts Omarchy's KeyboardPanel for optional screen-centred
 placement. The card-sized overlay stays open on focus loss and does not
 intercept pointer input outside the card. Its original source and license are from
@@ -53,6 +58,9 @@ The headless UI test sends real Qt keyboard events but substitutes the
 compositor-facing surface. A separate qmllint check validates imports and
 types on the production popup. Focus, placement and outside-click dismissal
 still need a live desktop check.
+The UI suite also replaces editor instances, checks deliberate deletion and
+menu edits, and reopens notes in a fresh process. Saved bytes and modification
+times must remain unchanged when merely reopening or closing the app.
 
 After building, regenerate the README image with:
 

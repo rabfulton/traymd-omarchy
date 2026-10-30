@@ -46,6 +46,11 @@ NotesPopup {
         focusEditor()
     }
 
+    function toggleTask(position) {
+        focusEditor()
+        if (renderer.toggleTask(position)) editor.commitUserEdit()
+    }
+
     function shortcutLabel(label, action) {
         const key = Backend.Keybindings.shortcuts[action]
         return label + (key ? " · " + key : "")
@@ -187,7 +192,11 @@ NotesPopup {
                 topPadding: Style.space(3)
                 bottomPadding: Style.space(16)
                 background: null
-                ContextMenu.menu: EditorMenu { id: editorMenu; editor: editor }
+                ContextMenu.menu: EditorMenu {
+                    id: editorMenu
+                    editor: editor
+                    onEdited: editor.commitUserEdit()
+                }
                 Accessible.name: "Note"
                 Keys.priority: Keys.BeforeItem
                 Keys.onPressed: function(event) {
@@ -197,6 +206,7 @@ NotesPopup {
                     if (event.modifiers === Qt.NoModifier) {
                         const pos = renderer.editKey(cursorPosition, selectionStart, selectionEnd, event.key)
                         if (pos >= 0) {
+                            editor.commitUserEdit()
                             cursorPosition = pos
                             event.accepted = true
                         } else if (selectionStart === selectionEnd && (event.key === Qt.Key_Left || event.key === Qt.Key_Right)) {
@@ -214,8 +224,14 @@ NotesPopup {
                 function syncText() {
                     if (text !== Backend.Notes.text) text = Backend.Notes.text
                 }
+                function commitUserEdit() {
+                    if (Backend.Notes.ready) Backend.Notes.text = text
+                }
                 Component.onCompleted: syncText()
-                onTextChanged: if (Backend.Notes.ready) Backend.Notes.text = text
+                // Buffer initialization/replacement is not a user edit. A
+                // newly created view must never write its initial empty text
+                // into the shared note store before loading that note.
+                onTextEdited: commitUserEdit()
                 onCursorPositionChanged: {
                     if (selectionStart !== selectionEnd) return
                     const position = renderer.taskContentPosition(cursorPosition)
@@ -303,9 +319,9 @@ NotesPopup {
                             Accessible.role: Accessible.CheckBox
                             Accessible.name: modelData.label || "Task"
                             Accessible.checked: modelData.checked || false
-                            Accessible.onPressAction: renderer.toggleTask(modelData.position)
-                            Keys.onSpacePressed: renderer.toggleTask(modelData.position)
-                            Keys.onReturnPressed: renderer.toggleTask(modelData.position)
+                            Accessible.onPressAction: root.toggleTask(modelData.position)
+                            Keys.onSpacePressed: root.toggleTask(modelData.position)
+                            Keys.onReturnPressed: root.toggleTask(modelData.position)
                             Text {
                                 anchors.centerIn: parent
                                 text: "✓"
@@ -317,7 +333,7 @@ NotesPopup {
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: { root.focusEditor(); renderer.toggleTask(modelData.position) }
+                                onClicked: root.toggleTask(modelData.position)
                             }
                         }
                         Rectangle {

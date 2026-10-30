@@ -93,6 +93,14 @@ omarchy plugin update traymd-omarchy
 Click the notes icon after updating. If the native backend needs rebuilding,
 setup opens automatically; otherwise your notes open immediately.
 
+Upgrading from an older build and still seeing the old editor? Rebuild once:
+
+```bash
+bash ~/.config/omarchy/plugins/traymd-omarchy/install.sh
+```
+
+This also restarts the shell and activates automatic setup for future updates.
+
 Already installed from a development checkout? From that checkout, run:
 
 ```bash
