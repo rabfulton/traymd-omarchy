@@ -24,6 +24,7 @@ endforeach()
 set(TRAYMD_BACKEND_PATH "${CMAKE_BINARY_DIR}/plugin/TrayMDBackend")
 configure_file(backend/qmldir plugin/TrayMDBackend/qmldir @ONLY)
 
+option(BUILD_TESTING "Build developer tests" OFF)
 include(CTest)
 if(BUILD_TESTING)
   find_package(Qt6 REQUIRED COMPONENTS Test)

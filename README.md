@@ -49,6 +49,8 @@ Defaults while the popup is focused:
 | Ctrl+S | Save immediately |
 | Ctrl+Shift+Delete | Delete, after confirmation |
 
+Alt+Left/Right switches notes; Ctrl+Left/Right keeps normal word navigation.
+
 Edit `~/.config/traymd-omarchy/config.ini` to change these bindings. The file
 is created automatically on first use, and changes apply without a restart.
 For example:

@@ -21,9 +21,8 @@ done
 if $install_deps; then
     omarchy pkg add base-devel cmake qt6-base qt6-declarative glib2 python
 fi
-cmake -S "$project_dir" -B "$build_dir" -DCMAKE_BUILD_TYPE=Release
-cmake --build "$build_dir" --parallel
-ctest --test-dir "$build_dir" --output-on-failure
+cmake -S "$project_dir" -B "$build_dir" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+cmake --build "$build_dir" --target traymdbackend --parallel
 omarchy plugin validate "$build_dir/plugin"
 
 # Fully stage the build before touching the installed plugin. Keep an existing

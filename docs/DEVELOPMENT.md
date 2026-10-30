@@ -4,7 +4,7 @@ Build dependencies: `base-devel`, `cmake`, `qt6-base`, `qt6-declarative`, `glib2
 The Quickshell-based Omarchy shell must be installed.
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
@@ -16,13 +16,15 @@ The marker fingerprints native sources and the installed Qt version. If a
 build is needed, it launches `scripts/first-run.sh` in a terminal automatically.
 
 `./install.sh` installs missing dependencies through `omarchy pkg add`, builds
-in the user's cache, tests, installs and restarts the shell. It preserves the
+in the user's cache, installs and restarts the shell. It preserves the
 Git checkout and the selected bar section. Pass `--no-deps` to skip package
 installation, or `--reset-settings` to reset popup appearance with a backup.
 The system update integration uses `--no-restart`, leaving the final restart to
 Omarchy. The installer registers `scripts/hooks/traymd-omarchy` using Omarchy's
 `post-update` hook and a local Git `post-merge` wrapper in the installed checkout.
 Generated native files and `.native-build.json` are ignored by Git.
+Tests are opt-in for development. Release installs and updates explicitly use
+`BUILD_TESTING=OFF`, compile only the backend and never run the test suite.
 
 Release installs use `omarchy plugin add … --enable`; updates use
 `omarchy plugin update traymd-omarchy`. Git's post-merge hook runs
