@@ -28,16 +28,60 @@ your default browser. Ordinary clicks and dragging let you edit and select text.
 Opening the popup focuses the note so you can type immediately, wherever the
 mouse is. Clicking another window releases focus and leaves the note visible.
 
-Enter continues a list; Enter on an empty item ends it. The right-click menu
+Use **+** or **Ctrl+N** to create a note, and **‹** / **›** or
+**Alt+Left** / **Alt+Right** to move between notes. The right-click menu
 includes undo, redo, cut, copy, paste and select all.
-
-Task lists work too: type `- [ ] To do` or `- [x] Done`, then click the
-checkbox to toggle it. Enter adds an unchecked task; Enter on an empty task
-ends the list. Task lists stay as ordinary Markdown when saved.
 
 Edits save after 1.5 seconds of idle time, and when switching or closing notes.
 Markdown files added to the notes folder appear automatically. External changes
 to saved notes also appear without restarting the app.
+
+### Typing Markdown
+
+Type the examples below directly into a note. The editor formats the text as
+you type and hides most Markdown markers; the saved file keeps the original
+Markdown. Complete both the opening and closing markers for inline formatting.
+
+| Feature | What to type |
+| --- | --- |
+| Heading | Start a line with `# Heading`, `## Subheading` or `### Smaller heading`. Use up to six `#` characters, followed by a space. |
+| Bold | `**bold text**` or `__bold text__` |
+| Italic | `*italic text*` or `_italic text_` |
+| Bold and italic | `***bold and italic***` |
+| Strikethrough | `~~crossed-out text~~` |
+| Inline code | Surround text with one backtick on each side: `` `code here` ``. |
+| Bullet list | Start each item on a new line with `- Item` or `* Item`. Include the space after the marker. |
+| Numbered list | Start a line with `1. First item`. Enter adds the next number. |
+| Unchecked task | `- [ ] To do` — include a space inside the brackets and after them. |
+| Completed task | `- [x] Done` |
+| Quote | Start a line with `> Quoted text`. Repeat `> ` on each quoted line. |
+| Named link | `[Example website](https://example.com)` |
+| Automatic link | Type `https://example.com` or `www.example.com`. |
+| Horizontal divider | Type `---` or `***` on its own line, press Enter, then move the cursor off that line to show the divider. |
+
+Press **Enter** after a list item to continue the list. Press **Enter** again
+on an empty item to leave the list. For tasks, Enter creates an unchecked item,
+even if the previous task is complete. Click a checkbox to toggle it; completed
+tasks appear crossed out. **Ctrl+click** a named or automatic link to open it.
+
+For a code block, type three backticks on a line, the code on the following
+lines, and three backticks on a closing line. An optional language name after
+the opening backticks enables syntax highlighting for supported languages,
+such as `python` or `c`:
+
+````markdown
+```python
+def remember():
+    return "A quick note"
+```
+````
+
+You can also use three tildes (`~~~`) for both fences. Fence lines become
+hidden when the cursor moves away from them. Markdown markers inside a code
+block or inline code are treated as literal text.
+
+To turn a heading, quote or task back into plain text, place the cursor at the
+start of its visible text and press **Backspace** to remove the prefix.
 
 ## Shortcuts
 
