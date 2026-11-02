@@ -129,6 +129,11 @@ press a Super key combination. Existing shortcuts are checked before saving.
 Custom `XDG_CONFIG_HOME` and `XDG_DATA_HOME` locations are respected for the
 app config and notes. A custom notes folder can be set in Omarchy's bar settings.
 
+The notes folder (including a custom folder) and `.trash` are restricted to your
+account (`0700`). New and saved notes use owner-only permissions (`0600`).
+Opening an existing notes folder tightens its permissions, protecting the notes
+and trash inside; existing files get `0600` when next saved.
+
 ## Appearance
 
 On first use, the popup is square, with each side half the monitor height,

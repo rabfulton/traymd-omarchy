@@ -8,6 +8,7 @@
 #include <QDir>
 #include <QFile>
 #include <QSettings>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QMetaProperty>
 #include <QTemporaryDir>
@@ -16,6 +17,23 @@
 #include <QTextCursor>
 #include <QTextLayout>
 #include <QAbstractTextDocumentLayout>
+
+#ifdef Q_OS_UNIX
+#include <sys/stat.h>
+
+class ScopedUmask {
+public:
+    explicit ScopedUmask(mode_t mask) : previous(umask(mask)) {}
+    ~ScopedUmask() { umask(previous); }
+private:
+    const mode_t previous;
+};
+
+static int fileMode(const QString &path) {
+    struct stat info{};
+    return stat(QFile::encodeName(path).constData(), &info) == 0 ? int(info.st_mode & 0777) : -1;
+}
+#endif
 
 class BackendTest : public QObject {
     Q_OBJECT
@@ -58,6 +76,92 @@ private slots:
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
     }
+
+#ifdef Q_OS_UNIX
+    void notesAndTrashStayPrivate_data() {
+        QTest::addColumn<int>("mask");
+        QTest::addColumn<bool>("defaultLocation");
+        QTest::newRow("default-022") << 0022 << true;
+        QTest::newRow("custom-022") << 0022 << false;
+        QTest::newRow("default-000") << 0000 << true;
+        QTest::newRow("custom-000") << 0000 << false;
+    }
+
+    void notesAndTrashStayPrivate() {
+        QFETCH(int, mask);
+        QFETCH(bool, defaultLocation);
+        ScopedUmask scopedMask(mask);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto previousDataHome = qgetenv("XDG_DATA_HOME");
+        const auto restoreDataHome = qScopeGuard([previousDataHome] {
+            if (previousDataHome.isNull()) qunsetenv("XDG_DATA_HOME");
+            else qputenv("XDG_DATA_HOME", previousDataHome);
+        });
+        const auto dataHome = dir.filePath("data");
+        QVERIFY(qputenv("XDG_DATA_HOME", QFile::encodeName(dataHome)));
+        QVERIFY(QDir().mkpath(dataHome));
+        const int parentMode = fileMode(dataHome);
+        const auto notes = dataHome + (defaultLocation ? "/traymd/notes" : "/custom-notes");
+        NoteStore store;
+        QVERIFY(store.initialize(defaultLocation ? QString() : notes));
+        QCOMPARE(store.directory(), notes);
+        QCOMPARE(fileMode(notes), 0700);
+        QCOMPARE(fileMode(dataHome), parentMode);
+        const auto first = store.currentName();
+        const auto firstPath = notes + "/" + first;
+        QCOMPARE(fileMode(firstPath), 0600);
+        replaceText(store, "Private note");
+        QVERIFY(store.save());
+        QCOMPARE(fileMode(firstPath), 0600);
+        // Saving must not inherit broad permissions from an older note or an
+        // external editor that replaced it with a publicly readable file.
+        QVERIFY(QFile::setPermissions(firstPath, QFile::ReadOwner | QFile::WriteOwner
+            | QFile::ReadGroup | QFile::ReadOther));
+        QCOMPARE(fileMode(firstPath), 0644);
+        replaceText(store, "Still private after saving");
+        QVERIFY(store.save());
+        QCOMPARE(fileMode(firstPath), 0600);
+        QCOMPARE(read(firstPath), "Still private after saving");
+        QVERIFY(store.newNote());
+        QCOMPARE(fileMode(notes + "/" + store.currentName()), 0600);
+        QVERIFY(store.navigate(-1));
+        QVERIFY(store.deleteCurrent());
+        QCOMPARE(fileMode(notes + "/.trash"), 0700);
+        QCOMPARE(fileMode(notes + "/.trash/" + first), 0600);
+        QCOMPARE(read(notes + "/.trash/" + first), "Still private after saving");
+    }
+
+    void existingStoreIsProtectedWithoutRewritingNotes() {
+        ScopedUmask scopedMask(0022);
+        QTemporaryDir dir;
+        const auto notes = dir.filePath("notes");
+        const auto trash = notes + "/.trash";
+        QVERIFY(QDir().mkpath(trash));
+        const auto path = notes + "/legacy.md";
+        const auto deleted = trash + "/deleted.md";
+        write(path, "Existing private thought");
+        write(deleted, "Previously deleted thought");
+        QCOMPARE(fileMode(notes), 0755);
+        QCOMPARE(fileMode(trash), 0755);
+        QCOMPARE(fileMode(path), 0644);
+        QCOMPARE(fileMode(deleted), 0644);
+        const auto modified = QFileInfo(path).lastModified();
+        NoteStore store;
+        QVERIFY(store.initialize(notes));
+        QCOMPARE(fileMode(notes), 0700);
+        QCOMPARE(store.text(), "Existing private thought");
+        QVERIFY(store.save());
+        QCOMPARE(read(path), "Existing private thought");
+        QCOMPARE(QFileInfo(path).lastModified(), modified);
+        QCOMPARE(read(deleted), "Previously deleted thought");
+        // Reuse an existing trash directory and retain all recovered contents.
+        QVERIFY(store.deleteCurrent());
+        QCOMPARE(fileMode(trash), 0700);
+        QCOMPARE(read(trash + "/legacy.md"), "Existing private thought");
+        QCOMPARE(read(deleted), "Previously deleted thought");
+    }
+#endif
 
     void legacyMarkdownRoundTrip() {
         QTemporaryDir dir;

@@ -45,7 +45,8 @@ bool NoteDocument::save() {
     const auto text = m_document.toPlainText();
     const auto output = text.toUtf8();
     QSaveFile file(m_path);
-    if (!file.open(QIODevice::WriteOnly) || file.write(output) != output.size() || !file.commit())
+    if (!file.open(QIODevice::WriteOnly) || !file.setPermissions(QFile::ReadOwner | QFile::WriteOwner)
+        || file.write(output) != output.size() || !file.commit())
         return fail("Could not save: " + file.errorString());
     m_diskBytes = output;
     m_savedText = text;

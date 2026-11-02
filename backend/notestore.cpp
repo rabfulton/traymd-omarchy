@@ -5,12 +5,25 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QStringDecoder>
 #include <QUuid>
 #include <QRegularExpression>
 #include <algorithm>
+
+namespace {
+bool ensurePrivateDirectory(const QString &path) {
+    const auto permissions = QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner;
+    // mkdir's permissions overload works on Qt 6.9 too. Only the store's own
+    // directory is restricted; shared parents such as XDG_DATA_HOME are kept.
+    if (!QDir().mkpath(QFileInfo(path).absolutePath())) return false;
+    if (!QDir().mkdir(path, permissions) && !QFileInfo(path).isDir()) return false;
+    // Also protect existing notes and trash without walking their contents.
+    return QFile::setPermissions(path, permissions);
+}
+}
 
 NoteStore::NoteStore(QObject *parent) : QObject(parent) {
     m_rescan.setSingleShot(true);
@@ -49,7 +62,7 @@ bool NoteStore::initialize(const QString &directory) {
             + "/traymd/notes";
     path = QDir::cleanPath(path);
     if (!QDir::isAbsolutePath(path)) return fail("Notes directory must be an absolute path.");
-    if (!QDir().mkpath(path)) return fail("Cannot create notes directory: " + path);
+    if (!ensurePrivateDirectory(path)) return fail("Cannot create or secure notes directory: " + path);
     m_directory = path;
     return refresh();
 }
@@ -157,7 +170,7 @@ bool NoteStore::newNote() {
     const QString name = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss_zzz")
         + "_" + QUuid::createUuid().toString(QUuid::Id128).left(8) + ".md";
     QFile file(QDir(m_directory).filePath(name));
-    if (!file.open(QIODevice::WriteOnly | QIODevice::NewOnly))
+    if (!file.open(QIODevice::WriteOnly | QIODevice::NewOnly, QFile::ReadOwner | QFile::WriteOwner))
         return fail("Cannot create note: " + file.errorString());
     file.close();
     m_names.append(name);
@@ -174,7 +187,7 @@ bool NoteStore::navigate(int delta) {
 bool NoteStore::deleteCurrent() {
     if (!ready() || !save()) return false;
     const auto trash = QDir(m_directory).filePath(".trash");
-    if (!QDir().mkpath(trash)) return fail("Cannot create note trash folder.");
+    if (!ensurePrivateDirectory(trash)) return fail("Cannot create or secure note trash folder.");
     QString target = QDir(trash).filePath(currentName());
     if (QFile::exists(target)) target += "." + QUuid::createUuid().toString(QUuid::Id128);
     if (!QFile::rename(QDir(m_directory).filePath(currentName()), target))
