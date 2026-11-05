@@ -63,6 +63,7 @@ Rectangle {
                         palette.buttonText: Commons.Color.popups.text
                         palette.highlight: Commons.Color.accent
                         font.family: Style.font.family
+                        font.pixelSize: Style.font.body
                         onValueModified: root.edited(dimension.modelData === "Width" ? {width: value} : {height: value})
                         Component.onCompleted: if (dimension.modelData === "Width") root.firstField = sizeInput
                     }
@@ -85,6 +86,7 @@ Rectangle {
                 palette.buttonText: Commons.Color.popups.text
                 palette.highlight: Commons.Color.accent
                 font.family: Style.font.family
+                font.pixelSize: Style.font.body
                 onActivated: root.edited({placement: currentIndex === 1 ? "center" : "anchor"})
             }
             Button {
@@ -92,6 +94,7 @@ Rectangle {
                 palette.button: Commons.Color.background
                 palette.buttonText: Commons.Color.popups.text
                 font.family: Style.font.family
+                font.pixelSize: Style.font.body
                 onClicked: root.edited({width: 0, height: 0})
             }
             Text {
@@ -109,6 +112,7 @@ Rectangle {
                 palette.base: Commons.Color.background
                 palette.text: Commons.Color.popups.text
                 font.family: Style.font.family
+                font.pixelSize: Style.font.body
                 Keys.priority: Keys.BeforeItem
                 Keys.onPressed: function(event) {
                     if (!root.capturing) return
@@ -137,6 +141,7 @@ Rectangle {
                     palette.button: Commons.Color.background
                     palette.buttonText: Commons.Color.popups.text
                     font.family: Style.font.family
+                    font.pixelSize: Style.font.body
                     onClicked: { root.capturing = true; shortcutField.forceActiveFocus() }
                 }
                 Button {
@@ -145,6 +150,7 @@ Rectangle {
                     palette.button: Commons.Color.background
                     palette.buttonText: Commons.Color.popups.text
                     font.family: Style.font.family
+                    font.pixelSize: Style.font.body
                     onClicked: root.shortcutRequested("")
                 }
             }
@@ -162,6 +168,7 @@ Rectangle {
                 palette.button: Commons.Color.background
                 palette.buttonText: Commons.Color.popups.text
                 font.family: Style.font.family
+                font.pixelSize: Style.font.body
                 onClicked: root.closed()
             }
         }
