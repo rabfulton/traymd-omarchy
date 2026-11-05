@@ -94,7 +94,7 @@ NotesPopup {
             id: header
             anchors.top: parent.top
             width: parent.width
-            height: Style.space(40)
+            height: Math.max(Style.space(40), tools.implicitHeight, actions.implicitHeight)
 
             Row {
                 id: tools
@@ -120,6 +120,7 @@ NotesPopup {
                 }
             }
             Row {
+                id: actions
                 anchors.right: parent.right
                 spacing: Style.space(3)
                 NoteButton {
